@@ -1,0 +1,46 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # "Run workflow" button in the Actions tab
+  schedule:
+    - cron: '17 */6 * * *'  # every 6 hours: refresh search-engine pages with newly approved people
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Build site and SEO pages
+        run: node scripts/prerender.mjs
+        env:
+          # Uses your custom domain automatically if you set one in Settings → Pages.
+          SITE_URL: ${{ vars.SITE_URL || steps.pages.outputs.base_url }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
