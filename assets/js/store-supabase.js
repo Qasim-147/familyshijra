@@ -4,7 +4,7 @@
 (function (root) {
   const PERSON_COLS = ['id', 'slug', 'first_name', 'middle_name', 'last_name', 'maiden_name', 'nickname', 'gender',
     'birth_date', 'birth_place', 'death_date', 'death_place', 'is_living', 'current_place', 'occupation', 'bio',
-    'photo_url', 'father_id', 'mother_id', 'spouse_ids', 'visible', 'sample', 'created_at'];
+    'photo_url', 'father_id', 'mother_id', 'spouse_ids', 'visible', 'sample', 'created_at', 'entered_by'];
   const pickPerson = (p) => {
     const o = {};
     for (const k of PERSON_COLS) if (k in p) o[k] = p[k] === '' ? null : p[k];

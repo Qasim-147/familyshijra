@@ -3,19 +3,23 @@
 A beautiful, mobile-friendly, search-engine-friendly family tree (shijra) that the family builds together.
 
 - **Homepage with your family photo**: the haveli photo sits in an arched gold frame beside the title, with a badge naming the founding couple. Admins can replace it in **Admin → Settings → Homepage photo** (`assets/img/haveli.jpg` is the default).
-- **Family explorer (works like File Explorer)**: every person is a folder holding their husband or wife and children.
+- **Family explorer (works like File Explorer)**: every person is a folder holding their husband or wives and children. A man with two or more wives shows a separate group for each wife's children ("Children with Akbari Begam (1st wife)").
   - Collapsible folder tree on the left, address bar with clickable path and drop-down arrows, Back / Forward / Up buttons, search box.
-  - Views: **Icons**, **Details** (sortable columns) and **Chart** (the graphical tree, rooted at the open folder).
+  - Views: **Icons**, **Details** (sortable columns) and **Tree** (the graphical tree, rooted at the open folder). Visitors also get a **View as tree** button on the homepage.
   - Details pane on the right, status bar, collapsible groups, right-click menu (Open, View profile, Add relative, Copy link, Edit, Delete…).
   - Minimize and maximize buttons on the window; keyboard support (arrows, Enter to open, Backspace to go up, F2 to edit, Delete to delete for admins).
   - On phones: tap a folder to open it, the folder tree slides in from the left.
-- **Collapsible homepage sections**: Elders, How are we related?, Recently added and How to add your branch fold open and closed.
+- **Collapsible homepage sections**: Elders, How are we related? and Recently added fold open and closed.
 - **"Who are you in this family?"**: a visitor picks themselves once and every card shows *Your Dada*, *Your Khala*, *Your Bhatija*…
 - **Relationship finder with family words**: Dada/Dadi, Nana/Nani, Par-dada, Chacha/Taya/Phuphi, Mamu/Khala, Chachazad/Mamuzad bhai, Bhanja/Bhatija, Pota/Nawasa, Saas/Sasur, Bhabhi, Behnoi, Devar/Jeth, Nanad, Saala/Saali, Damad/Bahu, Chachi/Mumani/Khalu/Phupha, alongside the English relation and the path.
 - **Shijra Helper chat** (free, no API key): understands English plus Urdu/Hindustani family words. "Who is my dada?", "How is Hamza related to Imran?", "khala of Hamza", "children of Bade Abba", counts, eldest, how to add or correct someone. Typing indicator and an optional greeting bubble.
-- **Visitors**: add a member (with photo), suggest an edit, or request removal. Nothing appears until an admin approves it.
-- **Admin, full add / edit / delete everywhere**: edit, add-relative and delete buttons on every tree card, in every profile and in the People table; review and approve submissions (editor opens pre-filled and pre-linked); removal requests can hide or delete; hide/show anyone; backup and restore; remove the sample family in one click.
-- **Feature switches**: each homepage section, search, relationship finder, family words, helper chat and its greeting, spouses, generation numbers, starting ancestor, generations open on load, photo uploads, required email/phone, privacy of living people, announcement banner, Urdu title.
+- **Visitors view only**: they browse the explorer, the tree, profiles and the helper. Only the admin adds or changes entries.
+- **Direct publish**: whatever the admin saves appears for everyone at once. There is no submission or approval step.
+- **Entered by**: every entry records the name of the admin who made it (remembered on that device), shown to admins in profiles and the People table.
+- **Several wives and their lineage**: add wives in order (1st, 2nd…); when adding a child, pick which wife is the mother. The tree draws one lane per wife with her children, and family words cover Sautela bhai, Sauteli Ammi and Sautan.
+- **Form fields on or off**: in **Admin → Settings → Form fields** the admin chooses which fields the entry form shows (middle name, nickname, dates, places, occupation, story, photo, maiden name…). Turning a field off hides it from the form but keeps any saved value.
+- **Admin, full add / edit / delete everywhere**: edit, add-relative and delete buttons on every tree card, in every profile and in the People table; hide/show anyone; backup and restore; remove the sample family in one click.
+- **Feature switches**: each homepage section, search, relationship finder, family words, helper chat and its greeting, spouses, generation numbers, starting ancestor, generations open on load, entry form fields, privacy of living people, announcement banner, Urdu title.
 - **SEO**: every public person gets their own static page with schema.org data, plus an A–Z list, sitemap and robots.txt, rebuilt automatically.
 
 It runs entirely on free tiers: **GitHub Pages** (hosting) + **Supabase** (database, photo storage, admin login).
@@ -57,7 +61,7 @@ Open http://localhost:8000. Without Supabase configured it runs in **setup previ
 
 ## 4. First steps as admin
 
-1. Open the site → **Admin** → sign in.
+1. Open the site → **Admin sign-in** (link in the footer; the Admin button only shows once you are signed in) → sign in.
 2. **Data → Restore or import**: optionally upload `sample-family.json` to see a demo, then **Remove sample people** when you're ready.
 3. **People → Add person**: start with the eldest ancestor, then add children using the **Father / Mother** fields.
 4. **Settings**: site name, tagline, about text (used by Google), which ancestor the tree starts from, and feature switches.
@@ -66,15 +70,13 @@ Open http://localhost:8000. Without Supabase configured it runs in **setup previ
 
 | Switch | What it does |
 | --- | --- |
-| Accept new members and corrections | Shows **Add member** and **Suggest a correction** to visitors (also enforced in the database) |
-| Allow photo uploads | Photo field on visitor forms |
-| Require email / phone | Makes those contact fields mandatory on visitor forms |
+| Form fields | Which fields appear on the admin's entry form (Entered by, dates, places, occupation, story, photo, maiden name…) |
 | Search box | Name and place search in the header |
 | Relationship finder | "How are you related?" on every profile |
 | Shijra Helper chat / greeting bubble | The helper in the corner and its pop-up greeting |
 | Use family words for relations | Dada, Nani, Chacha, Khala… next to English |
-| Founders badge, Our elders, Recently added, How to add your branch | Show or hide each homepage section |
-| Family explorer opens as | Icons, Details list or Family chart |
+| Founders badge, Our elders, Recently added | Show or hide each homepage section |
+| Family explorer opens as | Icons, Details list or Tree view |
 | Homepage photo | Upload your own photo, or go back to the default |
 | Show birth dates and places of living people | Off by default for privacy |
 | Show husbands and wives / generation numbers | Tree display options |
@@ -84,14 +86,10 @@ Open http://localhost:8000. Without Supabase configured it runs in **setup previ
 
 Each person also has a **Show on the public tree** switch (Admin → People), so an admin can keep someone visible to admins only.
 
-## How submissions flow
+## How entries are published
 
-1. A visitor taps **Add member** (or **Add relative** on a profile), chooses the relationship ("Child of Madhav"), fills in details and an optional photo, and sends it.
-2. The admin sees a badge on **Admin** and the entry under **Submissions**, with the sender's name, email, phone and message.
-3. **Review and approve** opens the editor already filled in and linked (father, mother or spouse set from the relationship). The admin can change anything, then **Approve and publish**.
-4. The person appears in the tree for everyone immediately. Their search-engine page appears at the next scheduled build (every 6 hours), or right away via **Actions → Build and deploy → Run workflow**.
-
-Corrections work the same way: the admin sees each changed field as *old → new*.
+1. The admin signs in, opens a person and taps **Add a relative** (or **People → Add person**), picks the relationship (for a man with several wives: "Son or daughter with [wife]"), fills in the name, **Entered by** and any other switched-on fields, and saves.
+2. The person appears in the tree for everyone immediately. Their search-engine page appears at the next scheduled build (every 6 hours), or right away via **Actions → Build and deploy → Run workflow**.
 
 ## SEO
 
@@ -123,6 +121,6 @@ demo/                       Single-file demo build used for the hosted preview
 - Free Supabase projects pause after a week with no visits; any visit wakes them, or upgrade to Pro to keep it always on.
 - The tree loads the whole family list once (light text only) and draws branches only as they're expanded, which stays fast into the tens of thousands of people.
 
-## Spam protection
+## Security
 
-Visitor forms include a hidden honeypot field, the database only accepts submissions as `pending` with size limits, uploads are limited to images under 5 MB in a `submissions/` folder, and nothing is public until approved. For heavy spam, add Cloudflare Turnstile to the forms.
+Only signed-in admins can write: the database rejects any insert or update from visitors, and only admins can upload photos.

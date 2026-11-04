@@ -56,7 +56,7 @@
         html: `${menu ? '' : esc(s.bot_welcome || 'Assalam-o-Alaikum! How can I help?') + '<br><br>'}You can ask me things like:`,
         quick: [
           { label: m ? `Who is my Dada?` : 'Who are the elders?', ask: m ? 'Who is my dada?' : 'Who is the eldest?' },
-          { label: 'How do I add my family?', ask: 'How do I add my family?' },
+          { label: 'Show the family tree', ask: 'How do I see the tree?' },
           { label: 'How many people are here?', ask: 'How many people are in the shijra?' },
           { label: 'How are two people related?', ask: 'How is ' },
           { label: 'Find someone', ask: 'Find ' },
@@ -99,8 +99,7 @@
       if (kind === 'descendants') { const out = []; const seen = new Set(); const walk = (id) => { for (const c of F.children(idx, id)) if (!seen.has(c.id)) { seen.add(c.id); out.push(c); walk(c.id); } }; walk(p.id); arr = out; }
       const label = { parents: 'parents', children: 'children', spouses: 'husband or wife', siblings: 'brothers and sisters', grandparents: 'grandparents', grandchildren: 'grandchildren', uncles: 'uncles and aunts', cousins: 'first cousins', descendants: 'descendants' }[kind];
       if (!arr.length) {
-        const rel = { parents: 'parent', spouses: 'spouse', siblings: 'sibling', children: 'child' }[kind];
-        return { html: `${who} ${label} aren't recorded in the shijra yet.`, quick: rel && ctx.getSettings().submissions_open ? [{ label: `Add for ${F.shortName(p)}`, act: () => ctx.openAdd({ relativeId: p.id, relation: rel }) }] : [] };
+                return { html: `${who} ${label} aren't recorded in the shijra yet.` };
       }
       const sub = (x) => { const w = termOf(p.id, x.id); return [w, F.years(x, ctx.isPrivate(x))].filter(Boolean).join(' · '); };
       return { html: `${who} ${label} (${arr.length}):${list(arr.slice(0, 14), sub)}${arr.length > 14 ? `<small>…and ${arr.length - 14} more</small>` : ''}` };
@@ -138,23 +137,9 @@
       } },
       { re: /\b(oldest|eldest|earliest|first ancestor|founder|elders?|buzurg)\b/i, run: () => extreme(1) },
       { re: /\b(youngest|newest|latest born|chhota|chota)\b/i, run: () => extreme(-1) },
-      { re: /\b(add|join|submit|register|include|new member|put me|enter|shamil)\b/i, run: (t) => {
-        const s = ctx.getSettings();
-        if (!s.submissions_open) return { html: 'New entries are closed right now. Please check back later or contact the family admin.' };
-        const ps = findPeopleIn(t);
-        return {
-          html: `Adding someone takes two minutes:<br>1. Find their father, mother or spouse in the tree and open their card.<br>2. Tap <b>Add relative</b> and choose how they're related.<br>3. Fill in names, dates, cities${s.allow_photos ? ' and a photo' : ''}, then send.<br>The family admin checks every entry before it appears.`,
-          quick: [ps[0] ? { label: `Add a relative of ${F.shortName(ps[0])}`, act: () => ctx.openRelChooser(ps[0].id) } : { label: 'Add a member now', act: () => ctx.openAdd({}) }],
-        };
-      } },
-      { re: /\b(wrong|mistake|correct|correction|fix|update|edit|change|spelling|galat)\b/i, run: (t) => {
-        const ps = findPeopleIn(t);
-        const tip = 'Open the person\'s card and tap <b>Suggest an edit</b>. The admin reviews your change before it goes live.';
-        return ps[0] ? { html: tip, quick: [{ label: `Edit ${F.shortName(ps[0])}`, act: () => ctx.openSuggest(ps[0].id) }] } : { html: tip + ' Tell me the name and I\'ll open it for you.' };
-      } },
-      { re: /\b(remove|delete|hide|privacy|private|living|safe)\b/i, run: () => ({ html: `Every entry is reviewed before it appears.${ctx.getSettings().show_living_dates ? '' : ' Birth dates and places of living people are hidden from visitors and search engines.'} To remove or hide someone, open their card and tap <b>Request removal</b>, then explain why.` }) },
-      { re: /\b(photo|picture|image|pic|tasveer)\b/i, run: () => ({ html: ctx.getSettings().allow_photos ? 'You can attach one photo when you add someone or suggest an edit. A clear face photo works best. Any size is fine; it is resized automatically.' : 'Photo uploads are turned off at the moment.' }) },
-      { re: /\b(zoom|move|navigate|expand|grow|see more|scroll|open)\b/i, run: () => ({ html: 'Drag the tree to move around. Pinch, or hold Ctrl and scroll, to zoom. Tap the gold <b>Show children</b> button under anyone to open the next generation, or use <b>Full screen</b>.' }) },
+      { re: /\b(add|join|submit|register|include|new member|put me|enter|shamil|wrong|mistake|correct|correction|fix|update|edit|change|spelling|galat|remove|delete)\b/i, run: () => ({ html: 'The shijra is kept by the family admin, who adds and corrects every entry. If someone is missing or a detail is wrong, please tell the family admin and they will update it.' }) },
+      { re: /\b(privacy|private|hide|living|safe)\b/i, run: () => ({ html: `Entries are added only by the family admin.${ctx.getSettings().show_living_dates ? '' : ' Birth dates and places of living people are hidden from visitors and search engines.'} To have something hidden or removed, please contact the family admin.` }) },
+      { re: /\b(zoom|move|navigate|expand|grow|see more|scroll|open|see the tree|tree view|tree)\b/i, run: () => ({ html: 'Drag the tree to move around. Pinch, or hold Ctrl and scroll, to zoom. Double-click (or tap) a folder in the family explorer to open the next generation, or press <b>Tree</b> to see the family as a tree and tap the gold <b>Show children</b> buttons.' }) },
       { re: /\b(shijra|shajra|what is this|meaning)\b/i, run: () => ({ html: '<b>Shijra</b> (شجرہ) means family tree, from the Arabic <i>shajarah</i>, a tree. A <i>shijra-e-nasab</i> records a family\'s lineage across generations.' }) },
       { re: /\b(thanks|thank you|shukriya|jazakallah|jazak|great|ok|okay)\b/i, run: () => ({ html: 'Khushi hui! Ask me about anyone in the family.' }) },
     ];
@@ -183,8 +168,7 @@
       }
       if (res.length) return { html: `Here's who I found:${list(res)}` };
       return {
-        html: `I couldn't find "${esc(q)}" in the shijra. Ask me about a person by name, how two people are related, or how to add someone.`,
-        quick: ctx.getSettings().submissions_open ? [{ label: 'Add this person', act: () => ctx.openAdd({ name: q }) }] : [],
+        html: `I couldn't find "${esc(q)}" in the shijra. Ask me about a person by name, or how two people are related.`,
       };
     }
 

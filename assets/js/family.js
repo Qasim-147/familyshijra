@@ -214,7 +214,11 @@
     if (da === 0 && db === 1) return w('Beta', 'Beti');
     if (da === 0 && db === 2) return P(1).gender === 'female' ? w('Nawasa', 'Nawasi') : w('Pota', 'Poti');
     if (da === 0 && db === 3) return P(1).gender === 'female' ? w('Par-nawasa', 'Par-nawasi') : w('Par-pota', 'Par-poti');
-    if (da === 1 && db === 1) return w('Bhai', 'Behen');
+    if (da === 1 && db === 1) {
+      const pa = [A.father_id, A.mother_id].filter(Boolean), pb = [B.father_id, B.mother_id].filter(Boolean);
+      const half = pa.length === 2 && pb.length === 2 && pa.filter((x) => pb.includes(x)).length === 1;
+      return half ? w('Sautela bhai', 'Sauteli behen') : w('Bhai', 'Behen');
+    }
     if (da === 2 && db === 1) {
       const par = P(1);
       if (par.gender === 'female') return w('Mamu', 'Khala');
@@ -283,12 +287,20 @@
         const base = r.label.replace(/ \((paternal|maternal) side\)$/, '');
         const sideM = r.label.match(/ \((paternal|maternal) side\)$/);
         const uncleAunt = base.match(/^((?:\d+× )?(?:great-)*)(uncle|aunt)/);
+        // A father's other wife is a stepmother; a mother's other husband a stepfather.
+        if (r.da === 1 && r.db === 0) {
+          const step = b.gender === 'female' ? ['stepmother', 'Sauteli Ammi'] : b.gender === 'male' ? ['stepfather', 'Sautele Abba'] : null;
+          if (step) return mk(step[0], [...r.path, bId], step[1]);
+        }
         const label = viaSpouse(base, b.gender)
           || (uncleAunt ? `${uncleAunt[1]}${word(b.gender, 'uncle', 'aunt', 'uncle or aunt')} by marriage${sideM ? sideM[0] : ''}` : `${base}'s ${word(b.gender, 'husband', 'wife', 'spouse')}${sideM ? sideM[0] : ''}`);
         const tl = localBlood(idx, r.path, r.da, r.db);
         return mk(label, [...r.path, bId], tl && spouseOfLocal[tl] ? spouseOfLocal[tl] : null);
       }
     }
+    // Two wives of the same husband are co-wives (sautan).
+    const sharedSpouse = [...(idx.spouses.get(aId) || [])].find((x) => (idx.spouses.get(bId) || new Set()).has(x));
+    if (sharedSpouse && a.gender === 'female' && b.gender === 'female') return mk('co-wife', [aId, sharedSpouse, bId], 'Sautan');
     // Fall back to any connection through the family graph.
     const prev = new Map([[aId, null]]); const q = [aId];
     while (q.length) {

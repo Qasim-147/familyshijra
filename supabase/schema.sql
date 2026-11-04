@@ -26,9 +26,11 @@ create table if not exists public.people (
   spouse_ids    uuid[] not null default '{}',
   visible       boolean not null default true,
   sample        boolean not null default false,
+  entered_by    text check (entered_by is null or char_length(entered_by) <= 80),
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+alter table public.people add column if not exists entered_by text check (entered_by is null or char_length(entered_by) <= 80);
 create index if not exists people_father_idx on public.people(father_id);
 create index if not exists people_mother_idx on public.people(mother_id);
 create index if not exists people_name_idx on public.people(lower(first_name), lower(last_name));
@@ -86,10 +88,8 @@ create policy "people public read" on public.people for select using (visible or
 drop policy if exists "people admin write" on public.people;
 create policy "people admin write" on public.people for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
--- Submissions: anyone can send one (always as 'pending'); only admins can read or change them.
+-- Submissions (legacy): visitors can no longer send entries; only admins can read or change old ones.
 drop policy if exists "submissions anyone insert" on public.submissions;
-create policy "submissions anyone insert" on public.submissions for insert to anon, authenticated
-  with check (status = 'pending' and person_id is null and reviewed_at is null);
 drop policy if exists "submissions admin all" on public.submissions;
 create policy "submissions admin all" on public.submissions for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
@@ -130,8 +130,6 @@ on conflict (id) do update set public = true, file_size_limit = 5242880, allowed
 drop policy if exists "photos public read" on storage.objects;
 create policy "photos public read" on storage.objects for select using (bucket_id = 'photos');
 drop policy if exists "photos visitor upload" on storage.objects;
-create policy "photos visitor upload" on storage.objects for insert to anon, authenticated
-  with check (bucket_id = 'photos' and (storage.foldername(name))[1] = 'submissions');
 drop policy if exists "photos admin all" on storage.objects;
 create policy "photos admin all" on storage.objects for all to authenticated
   using (bucket_id = 'photos' and public.is_admin()) with check (bucket_id = 'photos' and public.is_admin());

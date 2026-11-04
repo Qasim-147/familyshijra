@@ -19,10 +19,6 @@
     tagline: 'Generations, connected',
     about: '',
     root_id: null,
-    submissions_open: true,
-    allow_photos: true,
-    require_email: true,
-    require_phone: false,
     bot_enabled: true,
     bot_teaser: true,
     bot_welcome: 'Assalam-o-Alaikum! I can help you find relatives, explain how two people are related, and add your family to the shijra.',
@@ -35,9 +31,9 @@
     show_founders: true,
     show_elders: true,
     show_recent: true,
-    show_how: true,
     default_depth: 2,
     default_view: 'icons',
+    fields: {},
     hero_image: '',
     announcement: '',
   };
@@ -46,7 +42,7 @@
     store: null, people: [], allPeople: [], idx: F.buildIndex([]), settings: { ...DEFAULTS }, subs: [],
     isAdmin: false, canSubmit: false, setupMode: false, previewVisitor: false,
     rootId: null, expanded: new Set(), justOpened: null, view: { x: 0, y: 0, k: 1 }, highlight: null, firstRender: true,
-    openProfileId: null, adminTab: 'pending', adminOpen: false, meId: ls.get('shijra-me'), relA: null, relB: null,
+    openProfileId: null, adminTab: 'people', adminOpen: false, meId: ls.get('shijra-me'), relA: null, relB: null,
   };
   const admin = () => S.isAdmin && !S.previewVisitor;
   const HERO_DEFAULT = document.getElementById('heroImg') ? document.getElementById('heroImg').getAttribute('src') : '';
@@ -128,6 +124,30 @@
     if (S.settings.root_id && S.idx.byId.has(S.settings.root_id)) return S.settings.root_id;
     return F.autoRoot(S.idx);
   }
+  const ordinal = (n) => ['', '1st', '2nd', '3rd', '4th', '5th', '6th'][n] || `${n}th`;
+  /** A person's husbands or wives in the order they were added (first wife first). */
+  function orderedSpouses(id, ix = S.idx) {
+    const p = ix.byId.get(id); if (!p) return [];
+    const order = (p.spouse_ids || []).filter((x) => ix.byId.has(x));
+    for (const s of ix.spouses.get(id) || []) if (!order.includes(s)) order.push(s);
+    return order.map((x) => ix.byId.get(x));
+  }
+  /** "1st wife", "2nd wife"… when there is more than one; otherwise "Wife" / "Husband". */
+  function rankLabel(owner, i, n) {
+    const w = owner && owner.gender === 'female' ? 'husband' : owner && owner.gender === 'male' ? 'wife' : 'spouse';
+    return n > 1 ? `${ordinal(i + 1)} ${w}` : w[0].toUpperCase() + w.slice(1);
+  }
+  /** With two or more wives (or husbands): each partner with the children born to them, plus any whose other parent isn't recorded. */
+  function childGroups(id) {
+    const p = S.idx.byId.get(id); if (!p || !S.settings.show_spouses) return null;
+    const partners = orderedSpouses(id); if (partners.length < 2) return null;
+    const kids = F.children(S.idx, id);
+    const otherOf = (k) => (k.father_id === id ? k.mother_id : k.father_id);
+    const groups = partners.map((w, i) => ({ partner: w, rank: rankLabel(p, i, partners.length), kids: kids.filter((k) => otherOf(k) === w.id) }));
+    const known = new Set(partners.map((w) => w.id));
+    const rest = kids.filter((k) => !known.has(otherOf(k)));
+    return { partners, groups, rest, total: kids.length };
+  }
   function generationOf(id, seenSp = new Set()) {
     let gen = 1; let cur = S.idx.byId.get(id); const seen = new Set();
     while (cur && !seen.has(cur.id)) { seen.add(cur.id); const up = S.idx.byId.get(cur.father_id) || S.idx.byId.get(cur.mother_id); if (!up) break; gen++; cur = up; }
@@ -151,14 +171,13 @@
     $('#footLocal').textContent = s.site_title_local || '';
     $('#heroTagline').textContent = s.tagline || '';
     $('#searchBox').hidden = !s.search_enabled;
-    const canAdd = s.submissions_open || admin();
+    const canAdd = admin();
     $('#addBtn').hidden = !canAdd; $('#heroAdd').hidden = !canAdd;
+    $('#adminBtn').hidden = !S.isAdmin;
     $('#heroBot').hidden = !s.bot_enabled;
-    $('#elders').hidden = !s.show_elders; $('#relations').hidden = !s.relationship_finder; $('#how').hidden = !s.show_how;
+    $('#elders').hidden = !s.show_elders; $('#relations').hidden = !s.relationship_finder;
     $$('[data-sec="elders"]').forEach((a) => { a.hidden = !s.show_elders; });
     $$('[data-sec="relations"]').forEach((a) => { a.hidden = !s.relationship_finder; });
-    $$('[data-sec="how"]').forEach((a) => { a.hidden = !s.show_how; });
-    $$('#how .band').forEach((b) => { b.hidden = !canAdd; });
     $('#founders').hidden = !s.show_founders;
     $('#heroImg').src = s.hero_image || HERO_DEFAULT;
     document.title = s.tagline ? `${title} – ${s.tagline}` : title;
@@ -225,7 +244,7 @@
       ${up}${S.settings.show_generation && !opts.spouse ? `<span class="gen" title="Generation ${gen}">${roman(gen)}</span>` : ''}
       ${portraitHTML(p)}
       <div class="name">${esc(F.shortName(p))}</div>
-      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${you}${tools}
+      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
     </div>`;
   }
 
@@ -233,9 +252,24 @@
     const p = S.idx.byId.get(id);
     if (!p || seen.has(id)) return '';
     seen.add(id);
-    const spouses = S.settings.show_spouses ? F.spouses(S.idx, id) : [];
+    const spouses = S.settings.show_spouses ? orderedSpouses(id) : [];
     const kids = S.idx.children.get(id) || [];
     const open = S.expanded.has(id);
+    const cg = childGroups(id);
+    if (cg) {
+      // Two or more wives: the man on top, each wife below him with her own children.
+      const many = p.gender === 'female' ? 'husbands' : 'wives';
+      let h = `<li><div class="couple ${admin() ? 'has-tools' : ''}">${nodeHTML(p, gen, { showUp: isRoot })}</div>`;
+      h += `<button class="expand ${open ? 'open' : ''}" type="button" data-action="toggle" data-id="${esc(id)}" aria-expanded="${open}">${open ? 'Hide' : 'Show'} ${cg.partners.length} ${many}${cg.total ? ` & ${cg.total} ${cg.total === 1 ? 'child' : 'children'}` : ''}</button>`;
+      if (open) {
+        h += `<ul class="${S.justOpened === id ? 'grow' : ''}">`;
+        const lane = (head, list) => `<li class="lane"><div class="couple">${head}</div>${list.length ? `<ul>${list.map((k) => branchHTML(k.id, gen + 1, seen, false)).join('')}</ul>` : ''}</li>`;
+        for (const g of cg.groups) h += lane(nodeHTML(g.partner, gen, { spouse: true, rank: g.rank }), g.kids);
+        if (cg.rest.length) h += lane(`<div class="node lane-unknown">${p.gender === 'female' ? 'Father' : 'Mother'} not recorded</div>`, cg.rest);
+        h += '</ul>';
+      }
+      return h + '</li>';
+    }
     let html = `<li><div class="couple ${admin() ? 'has-tools' : ''}">${nodeHTML(p, gen, { showUp: isRoot })}`;
     for (const s of spouses) html += `<svg class="knot" aria-label="married"><use href="#i-knot"/></svg>${nodeHTML(s, gen, { spouse: true })}`;
     html += '</div>';
@@ -255,7 +289,7 @@
     const empty = !S.people.length;
     $('#emptyState').hidden = !empty;
     const btn = $('#emptyState [data-action="add"]');
-    if (btn) btn.hidden = !S.settings.submissions_open && !admin();
+    if (btn) btn.hidden = !admin();
     if (empty) { treeEl.innerHTML = ''; return; }
     const root = currentRoot();
     let before = null;
@@ -374,6 +408,7 @@
     let path = displayPath(currentRoot(), id);
     if (!path) { S.rootId = F.topAncestor(S.idx, id); path = displayPath(S.rootId, id) || [S.rootId]; }
     path.slice(0, -1).forEach((x) => S.expanded.add(x));
+    if (path[path.length - 1] !== id && childGroups(path[path.length - 1])) S.expanded.add(path[path.length - 1]);
     S.highlight = id;
     renderTree();
     requestAnimationFrame(() => centerOn(id));
@@ -424,7 +459,7 @@
   }
   const hasParentsIn = (p) => S.idx.byId.has(p.father_id) || S.idx.byId.has(p.mother_id);
   const kidsOf = (id) => S.idx.children.get(id) || [];
-  const spOf = (id) => (S.settings.show_spouses ? F.spouses(S.idx, id) : []);
+  const spOf = (id) => (S.settings.show_spouses ? orderedSpouses(id) : []);
   const isFull = (id) => kidsOf(id).length > 0 || spOf(id).length > 0;
   function scrollInto(el, box) {
     if (!el || !box) return;
@@ -472,7 +507,12 @@
   function xpRel(owner, p) {
     if (!owner) return '';
     const L = localOn();
-    if ((S.idx.spouses.get(owner) || new Set()).has(p.id)) return p.gender === 'female' ? (L ? 'Biwi · Wife' : 'Wife') : p.gender === 'male' ? (L ? 'Shohar · Husband' : 'Husband') : 'Spouse';
+    if ((S.idx.spouses.get(owner) || new Set()).has(p.id)) {
+      const list = orderedSpouses(owner); const i = list.findIndex((x) => x.id === p.id);
+      const base = rankLabel(S.idx.byId.get(owner), i, list.length);
+      const local = p.gender === 'female' ? 'Biwi' : p.gender === 'male' ? 'Shohar' : '';
+      return L && local ? `${local} · ${base}` : base;
+    }
     if (p.father_id === owner || p.mother_id === owner) return p.gender === 'female' ? (L ? 'Beti · Daughter' : 'Daughter') : p.gender === 'male' ? (L ? 'Beta · Son' : 'Son') : 'Child';
     return '';
   }
@@ -489,13 +529,20 @@
     if (!XP.folder) { const r = xpRoots(); return [{ key: 'roots', title: r.length > 1 ? 'Founding families' : 'Founding family', items: r }]; }
     const owner = idx.byId.get(XP.folder);
     const sp = spOf(XP.folder);
-    const spTitle = sp.length > 1 ? 'Husbands and wives' : owner.gender === 'female' ? 'Husband' : owner.gender === 'male' ? 'Wife' : 'Spouse';
+    const plural = owner.gender === 'female' ? 'Husbands' : owner.gender === 'male' ? 'Wives' : 'Husbands and wives';
+    const spTitle = sp.length > 1 ? plural : owner.gender === 'female' ? 'Husband' : owner.gender === 'male' ? 'Wife' : 'Spouse';
+    const cg = childGroups(XP.folder);
+    if (cg) {
+      return [{ key: 'spouses', title: spTitle, items: sp },
+        ...cg.groups.map((g) => ({ key: 'with:' + g.partner.id, title: `Children with ${F.shortName(g.partner)} (${g.rank})`, items: g.kids })),
+        { key: 'other', title: `Children, ${owner.gender === 'female' ? 'father' : 'mother'} not recorded`, items: cg.rest }].filter((g) => g.items.length);
+    }
     return [{ key: 'spouses', title: spTitle, items: sp }, { key: 'children', title: 'Children', items: F.children(idx, XP.folder) }].filter((g) => g.items.length);
   }
   function xpSub(p) {
     const yrs = F.years(p, isPrivate(p));
     if (XP.mode !== 'folder') { const h = homeOf(p.id); return [yrs, h ? `in ${F.shortName(S.idx.byId.get(h))}` : 'in Home'].filter(Boolean).join(' · '); }
-    if (!XP.folder) { const sp = spOf(p.id)[0]; return [sp ? `& ${F.shortName(sp)}` : '', yrs].filter(Boolean).join(' · '); }
+    if (!XP.folder) { const sps = spOf(p.id); return [sps.length > 1 ? `& ${sps.length} ${p.gender === 'female' ? 'husbands' : 'wives'}` : sps[0] ? `& ${F.shortName(sps[0])}` : '', yrs].filter(Boolean).join(' · '); }
     return [xpRel(XP.folder, p), yrs].filter(Boolean).join(' · ');
   }
   function meTag(p) {
@@ -512,14 +559,14 @@
 
   function xpRenderContent() {
     if (xpView() === 'chart') return;
-    const canAdd = S.settings.submissions_open || admin();
+    const canAdd = admin();
     if (!S.people.length) {
-      xpContent.innerHTML = `<div class="xp-empty"><span class="xp-fi lg" aria-hidden="true"><svg viewBox="0 0 64 52"><path class="fb" d="M3 8.5A4.5 4.5 0 0 1 7.5 4h13.2a4 4 0 0 1 2.9 1.2L28 9.6h28.5A4.5 4.5 0 0 1 61 14.1v29.4a4.5 4.5 0 0 1-4.5 4.5h-49A4.5 4.5 0 0 1 3 43.5z"/><path class="ff" d="M2 20.5A4.5 4.5 0 0 1 6.5 16h51a4.5 4.5 0 0 1 4.5 4.5v23a4.5 4.5 0 0 1-4.5 4.5h-51A4.5 4.5 0 0 1 2 43.5z"/></svg></span><h3>The shijra is waiting for its first name</h3><p>Start with the eldest ancestor you know. Every entry is reviewed before it appears here.</p>${canAdd ? '<button class="btn primary" type="button" data-action="add">Add the first family member</button>' : ''}</div>`;
+      xpContent.innerHTML = `<div class="xp-empty"><span class="xp-fi lg" aria-hidden="true"><svg viewBox="0 0 64 52"><path class="fb" d="M3 8.5A4.5 4.5 0 0 1 7.5 4h13.2a4 4 0 0 1 2.9 1.2L28 9.6h28.5A4.5 4.5 0 0 1 61 14.1v29.4a4.5 4.5 0 0 1-4.5 4.5h-49A4.5 4.5 0 0 1 3 43.5z"/><path class="ff" d="M2 20.5A4.5 4.5 0 0 1 6.5 16h51a4.5 4.5 0 0 1 4.5 4.5v23a4.5 4.5 0 0 1-4.5 4.5h-51A4.5 4.5 0 0 1 2 43.5z"/></svg></span><h3>The shijra is waiting for its first name</h3><p>Start with the eldest ancestor you know. Entries you save appear here straight away.</p>${canAdd ? '<button class="btn primary" type="button" data-action="add">Add the first family member</button>' : ''}</div>`;
       return;
     }
     const groups = xpGroups();
     if (!groups.some((g) => g.items.length)) {
-      if (XP.mode === 'search') xpContent.innerHTML = `<div class="xp-empty"><h3>No one matches "${esc(XP.query)}"</h3><p>Try a first name, a nickname like Bade Abba, or a city.</p>${S.settings.submissions_open && !admin() ? `<button class="btn" type="button" data-xadd-name="${esc(XP.query)}">Add ${esc(XP.query)} to the shijra</button>` : ''}</div>`;
+      if (XP.mode === 'search') xpContent.innerHTML = `<div class="xp-empty"><h3>No one matches "${esc(XP.query)}"</h3><p>Try a first name, a nickname like Bade Abba, or a city.</p>${false ? `<button class="btn" type="button" data-xadd-name="${esc(XP.query)}">Add ${esc(XP.query)} to the shijra</button>` : ''}</div>`;
       else if (XP.mode === 'recent') xpContent.innerHTML = '<div class="xp-empty"><h3>Nothing added recently</h3></div>';
       else {
         const o = S.idx.byId.get(XP.folder);
@@ -619,21 +666,21 @@
   const xpTarget = () => XP.sel || (XP.mode === 'folder' ? XP.folder : null);
   function xpRenderCmd() {
     const t = xpTarget(); const p = t && S.idx.byId.get(t);
-    const canAdd = S.settings.submissions_open || admin();
+    const canAdd = admin();
     const v = xpView();
     const me = S.meId && S.idx.byId.get(S.meId);
     const dis = p ? '' : 'disabled';
     $('#xpCmd').innerHTML = `
       ${canAdd ? `<button class="xp-c primary" type="button" data-xcmd="new">${ico('i-plus')}${p ? 'Add relative' : 'Add member'}</button>` : ''}
       ${admin() ? `<button class="xp-c" type="button" data-xcmd="edit" ${dis}>${ico('i-edit')}Edit</button><button class="xp-c danger" type="button" data-xcmd="delete" ${dis}>${ico('i-trash')}Delete</button>`
-        : S.settings.submissions_open ? `<button class="xp-c" type="button" data-xcmd="suggest" ${dis}>${ico('i-edit')}Suggest an edit</button>` : ''}
+        : false ? `<button class="xp-c" type="button" data-xcmd="suggest" ${dis}>${ico('i-edit')}Suggest an edit</button>` : ''}
       <button class="xp-c" type="button" data-xcmd="profile" ${dis}>${ico('i-card')}Profile</button>
       <button class="xp-c" type="button" data-xcmd="share" ${dis}>${ico('i-link')}Copy link</button>
       <span class="xp-vr" aria-hidden="true"></span>
       <div class="xp-seg" role="group" aria-label="View">
         <button class="xp-c" type="button" data-xview="icons" aria-pressed="${v === 'icons'}" title="Large icons">${ico('i-grid')}<span>Icons</span></button>
         <button class="xp-c" type="button" data-xview="details" aria-pressed="${v === 'details'}" title="Details list">${ico('i-list')}<span>Details</span></button>
-        <button class="xp-c" type="button" data-xview="chart" aria-pressed="${v === 'chart'}" title="Family chart" ${XP.mode !== 'folder' ? 'disabled' : ''}>${ico('i-chart')}<span>Chart</span></button>
+        <button class="xp-c" type="button" data-xview="chart" aria-pressed="${v === 'chart'}" title="Tree view" ${XP.mode !== 'folder' ? 'disabled' : ''}>${ico('i-chart')}<span>Tree</span></button>
       </div>
       <span class="xp-spacer"></span>
       ${S.people.length ? `<button class="xp-c" type="button" id="meChip" data-xcmd="me">${me ? `${portraitHTML(me, 'sm')}You: ${esc(F.shortName(me))}` : `${ico('i-user')}Who are you?`}</button>` : ''}
@@ -643,7 +690,7 @@
   function xpRenderDetails() {
     const el = $('#xpDetails'); if (el.hidden) return;
     const id = xpTarget(); const p = id && S.idx.byId.get(id);
-    const canAdd = S.settings.submissions_open || admin();
+    const canAdd = admin();
     if (!p) {
       const living = S.people.filter(F.isLiving).length;
       el.innerHTML = `<div class="xp-d"><div class="xp-d-hero"><svg viewBox="0 0 24 24" width="64" height="64" style="color:var(--gold)" aria-hidden="true"><use href="#i-home"/></svg><h3>${esc(S.settings.site_title || 'Family Shijra')}</h3><div class="years">${S.people.length} members · ${living} living</div></div>
@@ -660,6 +707,7 @@
     add('Occupation', p.occupation);
     add('Parents', F.parents(S.idx, p).map(F.shortName).join(' & '));
     add('Contents', contentsText(id));
+    if (admin()) add('Entered by', p.entered_by);
     el.innerHTML = `<div class="xp-d"><div class="xp-d-hero">${portraitHTML(p)}<h3>${esc(F.fullName(p))}</h3>${p.nickname ? `<div class="nick">${esc(p.nickname)}</div>` : ''}<div class="years">${esc(F.years(p, priv))}</div></div>
       ${S.meId === id ? '<div class="xp-d-rel"><b>This is you</b></div>' : me ? `<div class="xp-d-rel"><b>Your ${esc(me.word)}</b>${esc(me.r.text)}</div>` : ''}
       <dl>${facts.join('')}</dl>
@@ -668,13 +716,13 @@
         <button class="btn sm" type="button" data-action="xp-profile" data-id="${esc(id)}">Full profile</button>
         ${canAdd ? `<button class="btn sm" type="button" data-action="add-rel" data-id="${esc(id)}">${ico('i-plus')}Add relative</button>` : ''}
         ${admin() ? `<button class="btn sm" type="button" data-action="edit" data-id="${esc(id)}">${ico('i-edit')}Edit</button><button class="btn sm danger" type="button" data-action="delete" data-id="${esc(id)}">${ico('i-trash')}Delete</button>`
-          : S.settings.submissions_open ? `<button class="btn sm" type="button" data-action="suggest" data-id="${esc(id)}">${ico('i-edit')}Suggest an edit</button>` : ''}
+          : false ? `<button class="btn sm" type="button" data-action="suggest" data-id="${esc(id)}">${ico('i-edit')}Suggest an edit</button>` : ''}
       </div>
       ${touchy() ? '' : '<p class="xp-d-hint">Double-click a folder to open it. Right-click any person for more options.</p>'}</div>`;
   }
   function xpRenderStatus() {
     const n = xpView() === 'chart' ? null : xpGroups().reduce((a, g) => a + g.items.length, 0);
-    const left = n === null ? 'Family chart' : `${n} item${n === 1 ? '' : 's'}${XP.sel ? ' · 1 selected' : ''}`;
+    const left = n === null ? 'Tree view' : `${n} item${n === 1 ? '' : 's'}${XP.sel ? ' · 1 selected' : ''}`;
     const right = XP.mode === 'folder' && XP.folder ? (S.settings.show_generation ? `Generation ${roman(generationOf(XP.folder))} · ${contentsText(XP.folder)}` : contentsText(XP.folder)) : XP.mode === 'search' ? 'Searching all members' : `${S.people.length} members`;
     $('#xpStatus').innerHTML = `<span>${esc(left)}</span><span>${esc(right)}</span>`;
   }
@@ -802,27 +850,27 @@
   document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target)) { menuReturn = null; closeMenu(); } }, true);
   window.addEventListener('scroll', (e) => { if (menuEl && !menuEl.contains(e.target) && Date.now() - menuAt > 400) { menuReturn = null; closeMenu(); } }, true);
   function itemMenu(id) {
-    const canAdd = S.settings.submissions_open || admin();
+    const canAdd = admin();
     return [
       { label: 'Open', icon: ico('i-chev'), run: () => xpGo(id) },
       { label: 'View profile', icon: ico('i-card'), run: () => openProfile(id) },
-      { label: 'Show in family chart', icon: ico('i-chart'), run: () => { XP.view = 'chart'; ls.set('shijra-view', 'chart'); xpGo(homeOf(id), { select: id }); chartReveal(id); } },
+      { label: 'Show in tree view', icon: ico('i-chart'), run: () => { XP.view = 'chart'; ls.set('shijra-view', 'chart'); xpGo(homeOf(id), { select: id }); chartReveal(id); } },
       '-',
       canAdd && { label: 'Add a relative…', icon: ico('i-plus'), run: () => openRelChooser(id) },
       { label: 'Copy link', icon: ico('i-link'), run: () => copyLink(id) },
       S.meId !== id && { label: 'This is me', icon: ico('i-user'), run: () => { setMe(id); toast('Cards now show how each person is related to you.'); } },
       '-',
-      admin() ? { label: 'Edit', icon: ico('i-edit'), run: () => openEditor(id) } : S.settings.submissions_open && { label: 'Suggest an edit', icon: ico('i-edit'), run: () => openSuggest(id) },
-      admin() ? { label: 'Delete', danger: true, icon: ico('i-trash'), run: () => askDelete(id) } : S.settings.submissions_open && { label: 'Request removal', danger: true, icon: ico('i-trash'), run: () => openRemoval(id) },
+      admin() ? { label: 'Edit', icon: ico('i-edit'), run: () => openEditor(id) } : false && { label: 'Suggest an edit', icon: ico('i-edit'), run: () => openSuggest(id) },
+      admin() ? { label: 'Delete', danger: true, icon: ico('i-trash'), run: () => askDelete(id) } : false && { label: 'Request removal', danger: true, icon: ico('i-trash'), run: () => openRemoval(id) },
     ];
   }
   function backgroundMenu() {
-    const canAdd = S.settings.submissions_open || admin();
+    const canAdd = admin();
     const f = XP.mode === 'folder' && XP.folder;
     return [
       { label: 'Large icons', icon: ico('i-grid'), run: () => setView('icons') },
       { label: 'Details list', icon: ico('i-list'), run: () => setView('details') },
-      XP.mode === 'folder' && { label: 'Family chart', icon: ico('i-chart'), run: () => setView('chart') },
+      XP.mode === 'folder' && { label: 'Tree view', icon: ico('i-chart'), run: () => setView('chart') },
       '-',
       canAdd && (f ? { label: `Add a relative of ${F.shortName(S.idx.byId.get(f))}…`, icon: ico('i-plus'), run: () => openRelChooser(f) } : { label: 'Add a family member…', icon: ico('i-plus'), run: () => openAdd({}) }),
       f && { label: 'Up one generation', icon: ico('i-up'), run: () => xpUp() },
@@ -1036,7 +1084,8 @@
     S.openProfileId = id;
     const priv = isPrivate(p);
     const s = S.settings;
-    const parents = F.parents(S.idx, p), spouses = F.spouses(S.idx, id), kids = F.children(S.idx, id), sibs = F.siblings(S.idx, p);
+    const parents = F.parents(S.idx, p), spouses = orderedSpouses(id), kids = F.children(S.idx, id), sibs = F.siblings(S.idx, p);
+    const cg = childGroups(id);
     const facts = [];
     const add = (k, v) => { if (v) facts.push(`<dt>${k}</dt><dd>${esc(v)}</dd>`); };
     if (p.maiden_name) add('Born as', `${p.first_name || ''} ${p.maiden_name}`.trim());
@@ -1044,6 +1093,7 @@
     if (!F.isLiving(p)) add('Passed away', [F.fmtDate(p.death_date), p.death_place].filter(Boolean).join(', '));
     if (!priv) add('Lives in', F.isLiving(p) ? p.current_place : '');
     add('Occupation', p.occupation);
+    if (admin()) add('Entered by', p.entered_by);
     const desc = F.countDescendants(S.idx, id);
     const me = relToMe(id);
     const relWord = (x) => { const r = F.relationship(S.idx, id, x.id); return r && localOn() && r.local ? `${r.local} · ${F.years(x, isPrivate(x))}` : F.years(x, isPrivate(x)); };
@@ -1071,14 +1121,16 @@
         ${facts.length ? `<dl class="facts">${facts.join('')}</dl>` : ''}
         ${p.bio ? `<h3 class="section-title">Story</h3><p class="bio">${esc(p.bio)}</p>` : ''}
         ${parents.length ? `<h3 class="section-title">Parents</h3><div class="rel-list">${parents.map((x) => relRow(x, `${x.id === p.father_id ? 'Father' : 'Mother'} · ${F.years(x, isPrivate(x))}`)).join('')}</div>` : ''}
-        ${spouses.length ? `<h3 class="section-title">${spouses.length > 1 ? 'Spouses' : p.gender === 'female' ? 'Husband' : p.gender === 'male' ? 'Wife' : 'Spouse'}</h3><div class="rel-list">${spouses.map((x) => relRow(x)).join('')}</div>` : ''}
-        ${kids.length ? `<h3 class="section-title">Children (${kids.length})</h3><div class="rel-list">${kids.map((x) => relRow(x, relWord(x))).join('')}</div>` : ''}
+        ${spouses.length ? `<h3 class="section-title">${spouses.length > 1 ? (p.gender === 'female' ? 'Husbands' : p.gender === 'male' ? 'Wives' : 'Spouses') : p.gender === 'female' ? 'Husband' : p.gender === 'male' ? 'Wife' : 'Spouse'}${spouses.length > 1 ? ` (${spouses.length})` : ''}</h3><div class="rel-list">${spouses.map((x, i) => relRow(x, `${rankLabel(p, i, spouses.length)} · ${F.years(x, isPrivate(x))}`)).join('')}</div>` : ''}
+        ${cg ? [...cg.groups.filter((g) => g.kids.length).map((g) => `<h3 class="section-title">Children with ${esc(F.shortName(g.partner))} (${g.kids.length})</h3><div class="rel-list">${g.kids.map((x) => relRow(x, relWord(x))).join('')}</div>`),
+                cg.rest.length ? `<h3 class="section-title">Other children (${cg.rest.length})</h3><div class="rel-list">${cg.rest.map((x) => relRow(x, relWord(x))).join('')}</div>` : ''].join('')
+          : kids.length ? `<h3 class="section-title">Children (${kids.length})</h3><div class="rel-list">${kids.map((x) => relRow(x, relWord(x))).join('')}</div>` : ''}
         ${sibs.length ? `<h3 class="section-title">Brothers and sisters (${sibs.length})</h3><div class="rel-list">${sibs.map((x) => relRow(x, relWord(x))).join('')}</div>` : ''}
         <div class="profile-actions">
           <button class="btn" type="button" data-action="focus" data-id="${esc(id)}">Show in tree</button>
-          ${s.submissions_open || admin() ? `<button class="btn primary" type="button" data-action="add-rel" data-id="${esc(id)}">${icon('i-plus')}Add relative</button>` : ''}
+          ${admin() ? `<button class="btn primary" type="button" data-action="add-rel" data-id="${esc(id)}">${icon('i-plus')}Add relative</button>` : ''}
           ${admin() ? `<button class="btn" type="button" data-action="edit" data-id="${esc(id)}">${icon('i-edit')}Edit</button><button class="btn danger" type="button" data-action="delete" data-id="${esc(id)}">${icon('i-trash')}Delete</button>` : ''}
-          ${s.submissions_open && !admin() ? `<button class="btn" type="button" data-action="suggest" data-id="${esc(id)}">${icon('i-edit')}Suggest an edit</button><button class="btn ghost" type="button" data-action="remove-req" data-id="${esc(id)}">Request removal</button>` : ''}
+          ${false ? `<button class="btn" type="button" data-action="suggest" data-id="${esc(id)}">${icon('i-edit')}Suggest an edit</button><button class="btn ghost" type="button" data-action="remove-req" data-id="${esc(id)}">Request removal</button>` : ''}
           ${S.meId !== id ? `<button class="btn ghost" type="button" data-action="set-me" data-id="${esc(id)}">This is me</button>` : ''}
         </div>
       </div>`;
@@ -1150,37 +1202,62 @@
     return { wrap, form: $('form', wrap), close };
   }
 
-  const personFieldsHTML = (p = {}, { photos = true, prefix = 'f' } = {}) => `
+  // Optional form fields. The admin switches each one on or off in Settings → Form fields.
+  const FORM_FIELDS = [
+    ['entered_by', 'Entered by (admin name)', true],
+    ['middle_name', 'Middle name', true],
+    ['nickname', 'Known in the family as', true],
+    ['maiden_name', 'Family name at birth (if changed)', false],
+    ['gender', 'Gender', true],
+    ['status', 'Living or passed away', true],
+    ['birth_date', 'Date of birth', true],
+    ['birth_place', 'Place of birth', true],
+    ['death_date', 'Date of passing', true],
+    ['death_place', 'Place of passing', true],
+    ['current_place', 'Lives in', true],
+    ['occupation', 'Occupation', true],
+    ['bio', 'Story, memories or notes', true],
+    ['photo', 'Photo', true],
+  ];
+  const fieldOn = (k) => { const f = S.settings.fields || {}; const d = FORM_FIELDS.find((x) => x[0] === k); return k in f ? !!f[k] : d ? d[2] : true; };
+  const isDead = (p) => p.is_living === false || !!p.death_date;
+  function personFieldsHTML(p = {}, { prefix = 'f' } = {}) {
+    const on = fieldOn;
+    const txt = (k, id, label, extra = '', cls = '') => (on(k) ? `<div class="field" ${cls}><label for="${prefix}${id}">${label}</label><input id="${prefix}${id}" name="${k}" type="text" maxlength="120" value="${esc(p[k])}" ${extra}></div>` : '');
+    const enteredBy = p.entered_by || ls.get('shijra-entered-by') || '';
+    return `
+    ${on('entered_by') ? `<div class="field"><label for="${prefix}By">Entered by *</label><input id="${prefix}By" name="entered_by" type="text" required maxlength="80" value="${esc(enteredBy)}" placeholder="Name of the admin making this entry" autocomplete="name"><span class="hint">Remembered on this device for your next entry.</span></div>` : ''}
     <div class="grid2">
-      <div class="field"><label for="${prefix}First">First name *</label><input id="${prefix}First" name="first_name" type="text" required maxlength="80" value="${esc(p.first_name)}" placeholder="e.g. Mohammad Yusuf"></div>
-      <div class="field"><label for="${prefix}Last">Family name</label><input id="${prefix}Last" name="last_name" type="text" maxlength="80" value="${esc(p.last_name)}" placeholder="e.g. Siddiqui"></div>
-      <div class="field"><label for="${prefix}Middle">Middle name</label><input id="${prefix}Middle" name="middle_name" type="text" maxlength="80" value="${esc(p.middle_name)}"></div>
-      <div class="field"><label for="${prefix}Maiden">Family name at birth (if changed)</label><input id="${prefix}Maiden" name="maiden_name" type="text" maxlength="80" value="${esc(p.maiden_name)}"></div>
-      <div class="field"><label for="${prefix}Nick">Known in the family as</label><input id="${prefix}Nick" name="nickname" type="text" maxlength="80" value="${esc(p.nickname)}" placeholder="e.g. Bade Abba, Bi Apa"></div>
-      <div class="field"><span class="lbl" id="${prefix}GenderL">Gender</span>
+      <div class="field"><label for="${prefix}First">Name *</label><input id="${prefix}First" name="first_name" type="text" required maxlength="80" value="${esc(p.first_name)}" placeholder="e.g. Mohammad Yusuf"></div>
+      ${txt('middle_name', 'Middle', 'Middle name')}
+      ${txt('nickname', 'Nick', 'Known in the family as', 'placeholder="e.g. Bade Abba, Bi Apa"')}
+      ${txt('maiden_name', 'Maiden', 'Family name at birth (if changed)')}
+      ${on('gender') ? `<div class="field"><span class="lbl" id="${prefix}GenderL">Gender</span>
         <div class="seg" role="radiogroup" aria-labelledby="${prefix}GenderL">
           ${[['male', 'Male'], ['female', 'Female'], ['other', 'Other']].map(([g, l]) => `<label><input type="radio" name="gender" value="${g}" ${p.gender === g ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-        </div></div>
+        </div></div>` : ''}
     </div>
-    <div class="field"><span class="lbl" id="${prefix}LivingL">Status</span>
+    ${on('status') ? `<div class="field"><span class="lbl" id="${prefix}LivingL">Status</span>
       <div class="seg" role="radiogroup" aria-labelledby="${prefix}LivingL">
-        <label><input type="radio" name="is_living" value="yes" ${p.is_living !== false && !p.death_date ? 'checked' : ''}><span>Living</span></label>
-        <label><input type="radio" name="is_living" value="no" ${p.is_living === false || p.death_date ? 'checked' : ''}><span>Passed away</span></label>
-      </div></div>
+        <label><input type="radio" name="is_living" value="yes" ${!isDead(p) ? 'checked' : ''}><span>Living</span></label>
+        <label><input type="radio" name="is_living" value="no" ${isDead(p) ? 'checked' : ''}><span>Passed away</span></label>
+      </div></div>` : ''}
     <div class="grid2">
-      <div class="field"><label for="${prefix}Birth">Date of birth</label><input id="${prefix}Birth" name="birth_date" type="text" inputmode="numeric" placeholder="1950 or 1950-08-15" value="${esc(p.birth_date)}"><span class="hint">Year only is fine</span></div>
-      <div class="field"><label for="${prefix}BirthPlace">Place of birth</label><input id="${prefix}BirthPlace" name="birth_place" type="text" maxlength="120" value="${esc(p.birth_place)}"></div>
-      <div class="field" data-dead><label for="${prefix}Death">Date of passing</label><input id="${prefix}Death" name="death_date" type="text" inputmode="numeric" placeholder="2001 or 2001-03-02" value="${esc(p.death_date)}"></div>
-      <div class="field" data-dead><label for="${prefix}DeathPlace">Place of passing</label><input id="${prefix}DeathPlace" name="death_place" type="text" maxlength="120" value="${esc(p.death_place)}"></div>
-      <div class="field" data-alive><label for="${prefix}Current">Lives in</label><input id="${prefix}Current" name="current_place" type="text" maxlength="120" value="${esc(p.current_place)}"></div>
-      <div class="field"><label for="${prefix}Occ">Occupation</label><input id="${prefix}Occ" name="occupation" type="text" maxlength="120" value="${esc(p.occupation)}"></div>
+      ${txt('birth_date', 'Birth', 'Date of birth', 'inputmode="numeric" placeholder="1950 or 1950-08-15"')}
+      ${txt('birth_place', 'BirthPlace', 'Place of birth')}
+      ${txt('death_date', 'Death', 'Date of passing', 'inputmode="numeric" placeholder="1900 or 1900-03-02"', 'data-dead')}
+      ${txt('death_place', 'DeathPlace', 'Place of passing', '', 'data-dead')}
+      ${txt('current_place', 'Current', 'Lives in', '', 'data-alive')}
+      ${txt('occupation', 'Occ', 'Occupation')}
     </div>
-    <div class="field"><label for="${prefix}Bio">Story, memories or notes</label><textarea id="${prefix}Bio" name="bio" maxlength="5000">${esc(p.bio)}</textarea></div>
-    ${photos ? `<div class="field"><span class="lbl">Photo</span><div class="photo-pick"><div>${portraitHTML(p, '')}</div><div><input id="${prefix}Photo" name="photo" type="file" accept="image/*"><div class="hint">A clear face photo. It is resized automatically.</div>${p.photo_url ? `<label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.88rem"><input type="checkbox" name="remove_photo" id="${prefix}RmPhoto"> Remove current photo</label>` : ''}</div></div></div>` : ''}`;
+    ${on('bio') ? `<div class="field"><label for="${prefix}Bio">Story, memories or notes</label><textarea id="${prefix}Bio" name="bio" maxlength="5000">${esc(p.bio)}</textarea></div>` : ''}
+    ${on('photo') ? `<div class="field"><span class="lbl">Photo</span><div class="photo-pick"><div>${portraitHTML(p, '')}</div><div><input id="${prefix}Photo" name="photo" type="file" accept="image/*"><div class="hint">A clear face photo. It is resized automatically.</div>${p.photo_url ? `<label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.88rem"><input type="checkbox" name="remove_photo" id="${prefix}RmPhoto"> Remove current photo</label>` : ''}</div></div></div>` : ''}`;
+  }
 
-  function wireLiving(form) {
+  function wireLiving(form, p = {}) {
     const sync = () => {
-      const dead = form.querySelector('input[name=is_living][value=no]').checked;
+      const r = form.querySelector('input[name=is_living][value=no]');
+      const dead = r ? r.checked : isDead(p);
       $$('[data-dead]', form).forEach((x) => { x.hidden = !dead; });
       $$('[data-alive]', form).forEach((x) => { x.hidden = dead; });
     };
@@ -1191,45 +1268,28 @@
       if (f) prev.innerHTML = `<div class="portrait"><img src="${URL.createObjectURL(f)}" alt="Selected photo"></div>`;
     });
   }
+  /** Reads only the fields that are in the form, so switched-off fields keep their saved values. */
   function readPerson(form) {
     const fd = new FormData(form); const o = {};
-    for (const k of ['first_name', 'middle_name', 'last_name', 'maiden_name', 'nickname', 'gender', 'birth_date', 'birth_place', 'death_date', 'death_place', 'current_place', 'occupation', 'bio']) {
+    for (const k of ['first_name', 'middle_name', 'maiden_name', 'nickname', 'gender', 'birth_date', 'birth_place', 'death_date', 'death_place', 'current_place', 'occupation', 'bio', 'entered_by']) {
+      if (!form.querySelector(`[name="${k}"]`)) continue;
       const v = (fd.get(k) || '').toString().trim(); o[k] = v || null;
     }
-    o.is_living = fd.get('is_living') !== 'no';
-    if (o.is_living) { o.death_date = null; o.death_place = null; } else o.current_place = null;
+    if (form.querySelector('input[name=is_living]')) {
+      o.is_living = fd.get('is_living') !== 'no';
+      if (o.is_living) { if ('death_date' in o) o.death_date = null; if ('death_place' in o) o.death_place = null; } else if ('current_place' in o) o.current_place = null;
+    } else if (o.death_date) o.is_living = false;
     return o;
   }
   function validatePerson(form, o) {
     $$('.field.err', form).forEach((x) => x.classList.remove('err'));
     const errs = [];
     if (!o.first_name) { errs.push('Enter a first name.'); form.querySelector('[name=first_name]').closest('.field').classList.add('err'); }
-    for (const k of ['birth_date', 'death_date']) if (!F.validDate(o[k])) { errs.push('Write dates as a year (1950) or year-month-day (1950-08-15).'); form.querySelector(`[name=${k}]`).closest('.field').classList.add('err'); }
+    for (const k of ['birth_date', 'death_date']) if (o[k] && !F.validDate(o[k])) { errs.push('Write dates as a year (1950) or year-month-day (1950-08-15).'); form.querySelector(`[name=${k}]`)?.closest('.field')?.classList.add('err'); }
+    if (form.querySelector('[name=entered_by]') && !o.entered_by) { errs.push('Enter the name of the admin making this entry.'); form.querySelector('[name=entered_by]').closest('.field').classList.add('err'); }
     return errs;
   }
-  const submitterHTML = (s, p) => `
-    <fieldset class="fieldset"><legend>About you</legend>
-      <div class="grid2">
-        <div class="field"><label for="${p}You">Your name *</label><input id="${p}You" name="sub_name" type="text" required maxlength="100"></div>
-        <div class="field"><label for="${p}Email">Email${s.require_email ? ' *' : ''}</label><input id="${p}Email" name="sub_email" type="email" maxlength="160"></div>
-        <div class="field"><label for="${p}Phone">Phone${s.require_phone ? ' *' : ''}</label><input id="${p}Phone" name="sub_phone" type="tel" maxlength="30"></div>
-        <div class="field"><label for="${p}RelYou">Your relation to them</label><input id="${p}RelYou" name="sub_relation" type="text" maxlength="80" placeholder="e.g. grandson, bhatija"></div>
-      </div>
-      <div class="field"><label for="${p}Note">Message for the admin</label><textarea id="${p}Note" name="sub_note" maxlength="2000" placeholder="Sources, extra details, or anything to check"></textarea></div>
-      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-    </fieldset>`;
-  function readSubmitter(fd, s, errs) {
-    const sub = { name: (fd.get('sub_name') || '').toString().trim(), email: (fd.get('sub_email') || '').toString().trim(), phone: (fd.get('sub_phone') || '').toString().trim(), relation_to_person: (fd.get('sub_relation') || '').toString().trim(), note: (fd.get('sub_note') || '').toString().trim() };
-    if (!sub.name) errs.push('Enter your name so the admin knows who sent this.');
-    if (s.require_email && !/^\S+@\S+\.\S+$/.test(sub.email)) errs.push('Enter a valid email address.');
-    if (s.require_phone && sub.phone.replace(/\D/g, '').length < 7) errs.push('Enter a phone number.');
-    return sub;
-  }
-  function canVisitorSend() {
-    if (!S.settings.submissions_open) { toast('New entries are closed right now.'); return false; }
-    if (!S.canSubmit) { toast('Your access to this page is view-only, so you can\'t send entries.'); return false; }
-    return true;
-  }
+  function canVisitorSend() { toast('Only the family admin adds or changes entries in the shijra.'); return false; }
 
   // ---------- relation chooser ----------
   const RELATIONS = [['child', 'Child of'], ['spouse', 'Husband / wife of'], ['parent', 'Parent of'], ['sibling', 'Brother / sister of'], ['none', 'Not sure / first entry']];
@@ -1237,118 +1297,26 @@
     const p = S.idx.byId.get(id) || S.allPeople.find((x) => x.id === id); if (!p) return;
     if (!admin() && !canVisitorSend()) return;
     const n = esc(F.shortName(p));
+    const partners = orderedSpouses(p.id, F.buildIndex(S.allPeople));
+    const childBtns = partners.length > 1
+      ? partners.map((w, i) => `<button class="choice" type="button" data-rel="child" data-other="${esc(w.id)}"><b>Son or daughter with ${esc(F.shortName(w))}</b><small>${esc(rankLabel(p, i, partners.length))} of ${n}</small></button>`).join('')
+      : `<button class="choice" type="button" data-rel="child"><b>Son or daughter</b><small>A child of ${n}${partners[0] ? ` and ${esc(F.shortName(partners[0]))}` : ''}</small></button>`;
+    const spouseWord = p.gender === 'male' ? (partners.length ? 'Another wife' : 'Wife') : p.gender === 'female' ? 'Husband' : 'Husband or wife';
     const m = openModal(`Add a relative of ${F.shortName(p)}`, `<div class="choice-grid">
-      <button class="choice" type="button" data-rel="child"><b>Son or daughter</b><small>A child of ${n}</small></button>
-      <button class="choice" type="button" data-rel="spouse"><b>Husband or wife</b><small>Married to ${n}</small></button>
+      ${childBtns}
+      <button class="choice" type="button" data-rel="spouse"><b>${spouseWord}</b><small>${p.gender === 'male' && partners.length ? `A ${ordinal(partners.length + 1)} wife of ${n}` : `Married to ${n}`}</small></button>
       <button class="choice" type="button" data-rel="parent"><b>Father or mother</b><small>A parent of ${n}</small></button>
       <button class="choice" type="button" data-rel="sibling"><b>Brother or sister</b><small>Shares ${n}'s parents</small></button></div>`, '');
-    $$('[data-rel]', m.wrap).forEach((b) => { b.onclick = () => { m.close(); openAdd({ relativeId: id, relation: b.dataset.rel }); }; });
+    $$('[data-rel]', m.wrap).forEach((b) => { b.onclick = () => { m.close(); openAdd({ relativeId: id, relation: b.dataset.rel, otherParentId: b.dataset.other || null }); }; });
   }
 
-  // ---------- public submission forms ----------
-  function openAdd({ relativeId = null, relation = 'child', name = '' } = {}) {
-    if (admin()) { openEditor(null, { relativeId, relation, name }); return; }
-    if (!canVisitorSend()) return;
-    const s = S.settings;
-    const [first, ...rest] = name.split(' ');
-    const rel = relativeId && S.idx.byId.get(relativeId);
-    const body = `
-      <p class="muted" style="margin:0">Tell us about the person you'd like to add. The family admin checks every entry before it appears in the shijra.</p>
-      <fieldset class="fieldset"><legend>How are they related?</legend>
-        <div class="grid2">
-          <div class="field"><label for="aRel">They are the…</label><select id="aRel" name="relation">${RELATIONS.map(([v, l]) => `<option value="${v}" ${v === relation ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-          <div class="field" id="aRelWrap"><span class="lbl">…this person in the tree</span><div id="aRelPick"></div></div>
-        </div>
-      </fieldset>
-      <fieldset class="fieldset"><legend>About them</legend>${personFieldsHTML({ first_name: first || '', last_name: rest.join(' ') || (relation === 'child' && rel && rel.gender !== 'female' ? rel.last_name : '') }, { photos: s.allow_photos, prefix: 'a' })}</fieldset>
-      ${submitterHTML(s, 'a')}
-      <div class="form-error" id="aErr" role="alert"></div>`;
-    const m = openModal('Add a family member', body, '<button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit">Send for review</button>');
-    wireLiving(m.form);
-    const pick = personPicker($('#aRelPick', m.wrap), { value: relativeId, placeholder: 'Search the tree' });
-    const relSel = $('#aRel', m.wrap);
-    const syncRel = () => { $('#aRelWrap', m.wrap).hidden = relSel.value === 'none'; };
-    relSel.onchange = syncRel; syncRel();
-    m.form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const fd = new FormData(m.form);
-      if (fd.get('website')) { m.close(); return; }
-      const person = readPerson(m.form);
-      const errs = validatePerson(m.form, person);
-      const sub = readSubmitter(fd, s, errs);
-      if (relSel.value !== 'none' && !pick.get()) errs.push('Choose who they are related to, or pick "Not sure".');
-      $('#aErr', m.wrap).textContent = errs[0] || '';
-      if (errs.length) return;
-      const btn = $('button[type=submit]', m.wrap); btn.disabled = true; btn.textContent = 'Sending…';
-      try {
-        const file = m.form.querySelector('input[name=photo]')?.files[0];
-        if (file) person.photo_url = await S.store.uploadPhoto(await compressImage(file, S.store.photoMax), 'submissions');
-        await S.store.submit({ id: F.uid(), type: 'new', relation: relSel.value, relative_id: relSel.value === 'none' ? null : pick.get(), person, submitter: sub, status: 'pending', created_at: new Date().toISOString() });
-        $('.modal-body', m.wrap).innerHTML = `<div class="success"><svg width="56" height="56" viewBox="0 0 24 24" style="color:var(--gold)"><use href="#i-star"/></svg><h3>JazakAllah, ${esc(sub.name.split(' ')[0])}!</h3><p>${esc(person.first_name)} has been sent to the family admin. Once approved, they'll appear in the shijra.</p></div>`;
-        $('.modal-foot', m.wrap).innerHTML = '<button class="btn" type="button" data-again>Add another</button><button class="btn primary" type="button" data-done>Done</button>';
-        $('[data-done]', m.wrap).onclick = m.close;
-        $('[data-again]', m.wrap).onclick = () => openAdd({ relativeId: relSel.value === 'none' ? null : pick.get(), relation: relSel.value });
-      } catch (err) {
-        btn.disabled = false; btn.textContent = 'Send for review';
-        $('#aErr', m.wrap).textContent = 'Couldn\'t send: ' + (err.message || err) + '. Please try again.';
-      }
-    });
+  // ---------- adding people (admin only, published straight away) ----------
+  function openAdd({ relativeId = null, relation = 'child', name = '', otherParentId = null } = {}) {
+    if (!admin()) { canVisitorSend(); return; }
+    openEditor(null, { relativeId, relation, name, otherParentId });
   }
-
-  function openSuggest(id) {
-    const p = S.idx.byId.get(id); if (!p || !canVisitorSend()) return;
-    const s = S.settings;
-    const shown = isPrivate(p) ? { ...p, birth_date: '', birth_place: '', current_place: '' } : p;
-    const body = `
-      <p class="muted" style="margin:0">Change anything that's wrong or missing for <b>${esc(F.fullName(p))}</b>. The admin reviews it before it goes live.</p>
-      <fieldset class="fieldset"><legend>Details</legend>${personFieldsHTML(shown, { photos: s.allow_photos, prefix: 'c' })}</fieldset>
-      ${submitterHTML(s, 'c')}<div class="form-error" id="cErr" role="alert"></div>`;
-    const m = openModal('Suggest an edit', body, '<button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit">Send for review</button>');
-    wireLiving(m.form);
-    m.form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const fd = new FormData(m.form);
-      if (fd.get('website')) { m.close(); return; }
-      const person = readPerson(m.form);
-      const errs = validatePerson(m.form, person);
-      const sub = readSubmitter(fd, s, errs);
-      $('#cErr', m.wrap).textContent = errs[0] || '';
-      if (errs.length) return;
-      const btn = $('button[type=submit]', m.wrap); btn.disabled = true; btn.textContent = 'Sending…';
-      try {
-        const file = m.form.querySelector('input[name=photo]')?.files[0];
-        if (file) person.photo_url = await S.store.uploadPhoto(await compressImage(file, S.store.photoMax), 'submissions');
-        if (fd.get('remove_photo')) person.remove_photo = true;
-        await S.store.submit({ id: F.uid(), type: 'edit', target_id: id, relation: 'none', person, submitter: sub, status: 'pending', created_at: new Date().toISOString() });
-        m.close(); toast('Thank you. Your edit was sent for review.');
-      } catch (err) { btn.disabled = false; btn.textContent = 'Send for review'; $('#cErr', m.wrap).textContent = 'Couldn\'t send: ' + (err.message || err); }
-    });
-  }
-
-  function openRemoval(id) {
-    const p = S.idx.byId.get(id); if (!p || !canVisitorSend()) return;
-    const s = S.settings;
-    const body = `<p class="muted" style="margin:0">Ask the admin to remove or hide <b>${esc(F.fullName(p))}</b>. Please explain why, for example a duplicate entry or a privacy request.</p>
-      <div class="field"><label for="rWhy">Reason *</label><textarea id="rWhy" name="why" maxlength="1500" required></textarea></div>
-      ${submitterHTML(s, 'r')}<div class="form-error" id="rErr" role="alert"></div>`;
-    const m = openModal('Request removal', body, '<button class="btn" type="button" data-cancel>Cancel</button><button class="btn danger solid" type="submit">Send request</button>');
-    m.form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const fd = new FormData(m.form);
-      if (fd.get('website')) { m.close(); return; }
-      const errs = [];
-      const why = (fd.get('why') || '').toString().trim();
-      if (!why) errs.push('Tell the admin why this entry should be removed.');
-      const sub = readSubmitter(fd, s, errs);
-      sub.note = [why, sub.note].filter(Boolean).join('\n\n');
-      $('#rErr', m.wrap).textContent = errs[0] || '';
-      if (errs.length) return;
-      try {
-        await S.store.submit({ id: F.uid(), type: 'remove', target_id: id, relation: 'none', person: { first_name: p.first_name, last_name: p.last_name }, submitter: sub, status: 'pending', created_at: new Date().toISOString() });
-        m.close(); toast('Your removal request was sent to the admin.');
-      } catch (err) { $('#rErr', m.wrap).textContent = 'Couldn\'t send: ' + (err.message || err); }
-    });
-  }
+  const openSuggest = () => canVisitorSend();
+  const openRemoval = () => canVisitorSend();
 
   // ---------- admin: person editor ----------
   /** Admin-only actions explain why they can't run instead of doing nothing. */
@@ -1364,7 +1332,7 @@
     let p = existing ? { ...existing } : { id: F.uid(), visible: true, spouse_ids: [], is_living: true };
     if (pre.values) p = { ...p, ...Object.fromEntries(Object.entries(pre.values).filter(([k, v]) => v !== null && v !== '' && k !== 'remove_photo')) };
     if (pre.values && pre.values.remove_photo) p.photo_url = null;
-    if (!existing && pre.name) { const [a, ...b] = pre.name.split(' '); p.first_name = p.first_name || a; p.last_name = p.last_name || b.join(' '); }
+    if (!existing && pre.name) p.first_name = p.first_name || pre.name;
     let afterSave = null;
     const rel = pre.relativeId && S.allPeople.find((x) => x.id === pre.relativeId);
     const allIdx = F.buildIndex(S.allPeople);
@@ -1372,10 +1340,10 @@
       if (pre.relation === 'child') {
         if (rel.gender === 'female') p.mother_id = rel.id; else p.father_id = rel.id;
         const sp = F.spouses(allIdx, rel.id);
-        if (sp.length === 1) { if (rel.gender === 'female') p.father_id = sp[0].id; else p.mother_id = sp[0].id; }
-        if (!p.last_name) { const dad = allIdx.byId.get(p.father_id); if (dad) p.last_name = dad.last_name; }
+        const other = pre.otherParentId ? allIdx.byId.get(pre.otherParentId) : sp.length === 1 ? sp[0] : null;
+        if (other) { if (rel.gender === 'female') p.father_id = other.id; else p.mother_id = other.id; }
       } else if (pre.relation === 'spouse') p.spouse_ids = [rel.id];
-      else if (pre.relation === 'sibling') { p.father_id = rel.father_id; p.mother_id = rel.mother_id; if (!p.last_name) p.last_name = rel.gender === 'female' ? rel.maiden_name || rel.last_name : rel.last_name; }
+      else if (pre.relation === 'sibling') { p.father_id = rel.father_id; p.mother_id = rel.mother_id; }
       else if (pre.relation === 'parent') afterSave = async (np) => {
         const key = np.gender === 'female' ? 'mother_id' : 'father_id';
         const fresh = S.allPeople.find((x) => x.id === rel.id) || rel;
@@ -1384,25 +1352,33 @@
       };
     }
     const relNote = !existing && rel && pre.relation && pre.relation !== 'none' ? `<div class="card" style="background:var(--gold-soft);border:0;padding:12px 16px">Adding the <b>${esc((RELATIONS.find((r) => r[0] === pre.relation) || [, ''])[1].toLowerCase())}</b> <b>${esc(F.fullName(rel))}</b>. Family links below are filled in for you.</div>` : '';
-    const title = existing ? `Edit ${F.shortName(existing)}` : pre.fromSub ? 'Review and add to the shijra' : 'Add a person';
+    const title = existing ? `Edit ${F.shortName(existing)}` : 'Add a person';
     const body = `
-      ${pre.fromSub ? `<div class="card" style="background:var(--gold-soft);border:0"><b>Sent by ${esc(pre.fromSub.submitter?.name || 'a visitor')}</b>${pre.fromSub.submitter?.note ? `<div>${esc(pre.fromSub.submitter.note)}</div>` : ''}<div class="hint">Check and edit anything below, then publish it.</div></div>` : relNote}
-      ${personFieldsHTML(p, { photos: true, prefix: 'e' })}
+      ${relNote}
+      ${personFieldsHTML(p, { prefix: 'e' })}
       <fieldset class="fieldset"><legend>Family links</legend>
         <div class="grid2">
           <div class="field"><span class="lbl">Father</span><div id="eFather"></div></div>
-          <div class="field"><span class="lbl">Mother</span><div id="eMother"></div></div>
+          <div class="field"><span class="lbl">Mother</span><div id="eMother"></div><div class="wife-pick" id="eWives"></div></div>
         </div>
-        <div class="field"><span class="lbl">Husband / wife</span><div id="eSpouses"></div></div>
+        <div class="field"><span class="lbl">Husband / wives</span><div id="eSpouses"></div><span class="hint">A man can have two or more wives. Add them in order, first wife first.</span></div>
       </fieldset>
       <div class="switch"><div class="txt"><b>Show on the public shijra</b><small>Turn off to keep this person visible to admins only.</small></div><label class="toggle"><input type="checkbox" id="eVisible" ${p.visible !== false ? 'checked' : ''} aria-label="Show on the public shijra"><span></span></label></div>
       <div class="form-error" id="eErr" role="alert"></div>`;
-    const foot = `${existing ? `<button class="btn danger" type="button" data-del style="margin-right:auto">${icon('i-trash')}Delete</button>` : ''}<button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit">${pre.fromSub ? 'Approve and publish' : existing ? 'Save changes' : 'Add to shijra'}</button>`;
+    const foot = `${existing ? `<button class="btn danger" type="button" data-del style="margin-right:auto">${icon('i-trash')}Delete</button>` : ''}<button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit">${existing ? 'Save changes' : 'Add to shijra'}</button>`;
     const m = openModal(title, body, foot, { wide: true });
-    wireLiving(m.form);
+    wireLiving(m.form, p);
     const everyone = () => S.allPeople;
-    const fPick = personPicker($('#eFather', m.wrap), { value: p.father_id, exclude: [p.id], people: everyone });
-    const mPick = personPicker($('#eMother', m.wrap), { value: p.mother_id, exclude: [p.id], people: everyone });
+    // When the father has two or more wives, offer them as one-tap choices for the mother.
+    const drawWives = (fatherId) => {
+      const box = $('#eWives', m.wrap); const ix = F.buildIndex(S.allPeople);
+      const wives = fatherId ? orderedSpouses(fatherId, ix) : [];
+      box.innerHTML = wives.length > 1 ? `<span class="hint">Which wife is the mother?</span>${wives.map((w, i) => `<button type="button" class="chip${mPick && mPick.get() === w.id ? ' on' : ''}" data-wife="${esc(w.id)}">${esc(F.shortName(w))} <small>${esc(rankLabel(ix.byId.get(fatherId), i, wives.length))}</small></button>`).join('')}` : '';
+    };
+    const fPick = personPicker($('#eFather', m.wrap), { value: p.father_id, exclude: [p.id], people: everyone, onChange: (fid) => drawWives(fid) });
+    const mPick = personPicker($('#eMother', m.wrap), { value: p.mother_id, exclude: [p.id], people: everyone, onChange: () => drawWives(fPick.get()) });
+    drawWives(p.father_id);
+    $('#eWives', m.wrap).addEventListener('click', (e) => { const b = e.target.closest('[data-wife]'); if (b) { mPick.set(b.dataset.wife); drawWives(fPick.get()); } });
     const spPick = multiPicker($('#eSpouses', m.wrap), { values: [...new Set([...(p.spouse_ids || []), ...F.spouses(allIdx, p.id).map((x) => x.id)])], exclude: [p.id], people: everyone });
     const del = $('[data-del]', m.wrap);
     if (del) del.onclick = async () => { m.close(); await askDelete(existing.id); };
@@ -1420,10 +1396,10 @@
         if (file) np.photo_url = await S.store.uploadPhoto(await compressImage(file, S.store.photoMax), 'people');
         else if (m.form.querySelector('input[name=remove_photo]')?.checked) np.photo_url = null;
         np.slug = existing?.slug || F.slugify(np);
+        if (np.entered_by) ls.set('shijra-entered-by', np.entered_by);
         await savePersonWithLinks(np, existing);
         if (afterSave) await afterSave(np);
-        if (pre.fromSub) await S.store.updateSubmission(pre.fromSub, { status: 'approved', person_id: np.id, reviewed_at: new Date().toISOString() });
-        m.close(); toast(pre.fromSub ? `${F.shortName(np)} is now in the shijra.` : existing ? 'Changes saved.' : `${F.shortName(np)} added to the shijra.`);
+        m.close(); toast(existing ? 'Changes saved.' : `${F.shortName(np)} added to the shijra.`);
         if (!S.adminOpen) setTimeout(() => { reveal(np.id); openProfile(np.id); }, 300);
       } catch (err) { btn.disabled = false; btn.textContent = label; $('#eErr', m.wrap).textContent = 'Couldn\'t save: ' + (err.message || err); }
     });
@@ -1480,8 +1456,8 @@
       host.innerHTML = `<div class="admin">${head('')}<div class="admin-body">${S.store.supportsLogin ? loginHTML() : `<div class="card login"><h3>Admins only</h3><p class="muted">Only the site owner and editors can review entries. If you manage this shijra, ask the owner to give you Editor access.</p></div>`}</div></div>`;
       wireLogin(); return;
     }
-    const pending = S.subs.filter((x) => x.status === 'pending').length;
-    const tabs = [['pending', 'Submissions', pending], ['people', 'People', S.allPeople.length], ['settings', 'Settings'], ['data', 'Data']];
+    const tabs = [['people', 'People', S.allPeople.length], ['settings', 'Settings'], ['data', 'Data']];
+    if (!tabs.some((t) => t[0] === S.adminTab)) S.adminTab = 'people';
     const scrollTop = $('.admin-body', host)?.scrollTop || 0;
     host.innerHTML = `<div class="admin">
       ${head(`<button class="btn sm" type="button" data-action="preview-visitor">View as visitor</button>${S.store.supportsLogin ? '<button class="btn sm" type="button" data-action="logout">Sign out</button>' : ''}`)}
@@ -1489,7 +1465,7 @@
       <div class="admin-body"><div class="admin-inner" id="adminInner"></div></div></div>`;
     $$('.tab', host).forEach((t) => { t.onclick = () => { S.adminTab = t.dataset.tab; renderAdmin(); }; });
     const inner = $('#adminInner', host);
-    ({ pending: adminPending, people: adminPeople, settings: adminSettings, data: adminData })[S.adminTab](inner);
+    ({ people: adminPeople, settings: adminSettings, data: adminData })[S.adminTab](inner);
     $('.admin-body', host).scrollTop = scrollTop;
   }
 
@@ -1515,78 +1491,6 @@
     };
   }
 
-  function subSummary(sub) {
-    const per = sub.person || {};
-    const rel = sub.relative_id && S.allPeople.find((x) => x.id === sub.relative_id);
-    const target = sub.target_id && S.allPeople.find((x) => x.id === sub.target_id);
-    const relLabel = (RELATIONS.find((r) => r[0] === sub.relation) || [, ''])[1];
-    const rows = [];
-    const add = (k, v) => { if (v) rows.push(`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`); };
-    if (sub.type === 'edit') {
-      for (const [k, label] of [['first_name', 'First name'], ['middle_name', 'Middle'], ['last_name', 'Family name'], ['maiden_name', 'Born as'], ['nickname', 'Known as'], ['gender', 'Gender'], ['birth_date', 'Born'], ['birth_place', 'Birthplace'], ['death_date', 'Passed away'], ['death_place', 'Place of passing'], ['current_place', 'Lives in'], ['occupation', 'Occupation'], ['bio', 'Story']]) {
-        const nv = per[k] ?? null, ov = target ? target[k] ?? null : null;
-        if ((nv || '') !== (ov || '') && nv) add(label, `${ov ? ov + ' → ' : ''}${nv}`);
-      }
-      if (target && per.is_living === false && F.isLiving(target)) add('Status', 'Marked as passed away');
-      if (per.remove_photo) add('Photo', 'Asked to remove photo');
-      if (per.photo_url) add('Photo', 'New photo attached');
-    } else if (sub.type === 'new') {
-      add('Name', F.fullName(per)); add('Known as', per.nickname); add('Gender', per.gender);
-      add('Born', [per.birth_date, per.birth_place].filter(Boolean).join(', '));
-      if (per.is_living === false) add('Passed away', [per.death_date, per.death_place].filter(Boolean).join(', ') || 'Yes');
-      add('Lives in', per.current_place); add('Occupation', per.occupation); add('Story', per.bio);
-    }
-    const contact = [sub.submitter?.email, sub.submitter?.phone].filter(Boolean).join(' · ');
-    const title = sub.type === 'edit' ? `Edit for ${target ? F.fullName(target) : 'a deleted person'}` : sub.type === 'remove' ? `Remove ${target ? F.fullName(target) : F.fullName(per)}` : F.fullName(per);
-    const kind = { new: 'New member', edit: 'Edit', remove: 'Removal request' }[sub.type] || sub.type;
-    let actions = '';
-    if (sub.status === 'pending') {
-      if (sub.type === 'remove') actions = target ? `<button class="btn sm" type="button" data-sub="hide" data-sid="${esc(sub.id)}">Hide from visitors</button><button class="btn danger sm" type="button" data-sub="remove" data-sid="${esc(sub.id)}">${icon('i-trash')}Delete person</button><button class="btn sm ghost" type="button" data-sub="reject" data-sid="${esc(sub.id)}">Keep and reject</button>` : `<button class="btn sm" type="button" data-sub="reject" data-sid="${esc(sub.id)}">Close request</button>`;
-      else actions = `<button class="btn primary sm" type="button" data-sub="review" data-sid="${esc(sub.id)}">Review and approve</button><button class="btn sm" type="button" data-sub="reject" data-sid="${esc(sub.id)}">Reject</button>`;
-    } else if (sub.person_id) actions = `<button class="btn sm" type="button" data-sub="view" data-sid="${esc(sub.id)}">View in tree</button>`;
-    return `<div class="card sub-card">
-      ${portraitHTML(sub.type !== 'new' && !per.photo_url ? target || per : per, '')}
-      <div style="min-width:0">
-        <div class="toolbar"><h3 style="margin:0">${esc(title)}</h3><span class="kind ${sub.type === 'remove' ? 'remove' : ''}">${esc(kind)}</span><span class="status ${esc(sub.status)}">${esc(cap(sub.status))}</span></div>
-        <div class="meta">${sub.type === 'new' ? (rel ? `${esc(relLabel)} <b>${esc(F.fullName(rel))}</b> · ` : sub.relation === 'none' ? 'No relation given · ' : '') : ''}Sent by <b>${esc(sub.submitter?.name || 'Unknown')}</b>${sub.submitter?.relation_to_person ? ` (${esc(sub.submitter.relation_to_person)})` : ''}${contact ? ` · <span style="user-select:all">${esc(contact)}</span>` : ''}${sub.created_at ? ` · ${esc(new Date(sub.created_at).toLocaleDateString())}` : ''}</div>
-        ${rows.length ? `<dl>${rows.join('')}</dl>` : sub.type === 'edit' ? '<p class="muted">No changes listed.</p>' : ''}
-        ${sub.submitter?.note ? `<div class="meta" style="margin-top:6px;white-space:pre-wrap"><b>Message:</b> ${esc(sub.submitter.note)}</div>` : ''}
-        <div class="sub-actions">${actions}<button class="btn sm ghost" type="button" data-sub="delete" data-sid="${esc(sub.id)}">Delete entry</button></div>
-      </div></div>`;
-  }
-  let subFilter = 'pending';
-  function adminPending(el) {
-    const list = S.subs.filter((x) => subFilter === 'all' || x.status === subFilter);
-    el.innerHTML = `<div class="toolbar"><div class="seg" role="radiogroup" aria-label="Filter">${[['pending', 'Waiting'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['all', 'All']].map(([v, l]) => `<label><input type="radio" name="sf" value="${v}" ${subFilter === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
-      <span class="muted" style="margin-left:auto">Visitor entries are ${S.settings.submissions_open ? '<b style="color:var(--ok)">open</b>' : '<b style="color:var(--danger)">closed</b>'}. Change this in Settings.</span></div>
-      ${list.length ? list.map(subSummary).join('') : `<div class="card"><h3>${subFilter === 'pending' ? 'Nothing waiting for review' : 'No entries here'}</h3><p class="muted">When visitors use <b>Add member</b>, <b>Suggest an edit</b> or <b>Request removal</b>, their entries appear here for you to check and approve.</p></div>`}`;
-    $$('input[name=sf]', el).forEach((r) => { r.onchange = () => { subFilter = r.value; renderAdmin(); }; });
-    el.onclick = async (e) => {
-      const b = e.target.closest('[data-sub]'); if (!b) return;
-      const sub = S.subs.find((x) => x.id === b.dataset.sid); if (!sub) return;
-      const now = new Date().toISOString();
-      try {
-        switch (b.dataset.sub) {
-          case 'review':
-            if (sub.type === 'edit') {
-              if (!S.allPeople.find((x) => x.id === sub.target_id)) { toast('That person was deleted. Reject this edit instead.'); return; }
-              openEditor(sub.target_id, { values: sub.person, fromSub: sub });
-            } else openEditor(null, { values: sub.person, relativeId: sub.relative_id, relation: sub.relation, fromSub: sub });
-            break;
-          case 'reject': await S.store.updateSubmission(sub, { status: 'rejected', reviewed_at: now }); toast('Marked as rejected.'); break;
-          case 'hide': {
-            const t = S.allPeople.find((x) => x.id === sub.target_id);
-            await S.store.savePerson({ ...t, visible: false }); await S.store.updateSubmission(sub, { status: 'approved', reviewed_at: now }); toast(`${F.shortName(t)} is now hidden from visitors.`); break;
-          }
-          case 'remove': if (await askDelete(sub.target_id)) await S.store.updateSubmission(sub, { status: 'approved', reviewed_at: now }); break;
-          case 'delete': if (await confirmBox('Delete this entry?', 'It will be removed from the list. People already added to the shijra stay.')) { await S.store.deleteSubmission(sub); toast('Entry deleted.'); } break;
-          case 'view': closeAdmin(); reveal(sub.person_id); openProfile(sub.person_id); break;
-          default:
-        }
-      } catch (err) { toast('Couldn\'t update: ' + (err.message || err)); }
-    };
-  }
-
   let peopleQuery = '', peopleFilter = 'all';
   function adminPeople(el) {
     const idx = F.buildIndex(S.allPeople);
@@ -1600,11 +1504,12 @@
         <div class="field"><label for="pq" class="sr-only">Search people</label><input id="pq" type="search" placeholder="Search ${S.allPeople.length} people" value="${esc(peopleQuery)}"></div>
         <div class="field" style="flex:0 0 auto;min-width:170px"><label for="pf" class="sr-only">Filter</label><select id="pf">${[['all', 'Everyone'], ['hidden', 'Hidden from visitors'], ['nophoto', 'Without photo'], ['unlinked', 'Not linked to anyone'], ['sample', 'Sample entries']].map(([v, l]) => `<option value="${v}" ${peopleFilter === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <button class="btn primary" type="button" data-p="add">${icon('i-plus')}Add person</button></div>
-      <div class="card table-wrap" style="padding:0"><table class="people-table"><thead><tr><th>Name</th><th>Years</th><th class="hide-sm">Parents</th><th>Public</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+      <div class="card table-wrap" style="padding:0"><table class="people-table"><thead><tr><th>Name</th><th>Years</th><th class="hide-sm">Parents</th><th class="hide-sm">Entered by</th><th>Public</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
       ${shown.map((p) => `<tr><td><div class="who">${portraitHTML(p, 'sm')}<span>${esc(F.fullName(p))}${p.nickname ? `<br><small class="muted">${esc(p.nickname)}</small>` : ''}</span></div></td><td class="years">${esc(F.years(p, false))}</td>
         <td class="hide-sm muted">${esc(F.parents(idx, p).map(F.shortName).join(' & '))}</td>
+        <td class="hide-sm muted">${esc(p.entered_by || '')}</td>
         <td><label class="toggle"><input type="checkbox" data-vis="${esc(p.id)}" ${p.visible !== false ? 'checked' : ''} aria-label="Show ${esc(F.fullName(p))} publicly"><span></span></label></td>
-        <td class="acts"><button class="btn sm" type="button" data-p="rel" data-id="${esc(p.id)}" title="Add relative" aria-label="Add a relative of ${esc(F.shortName(p))}">${icon('i-plus')}</button><button class="btn sm" type="button" data-p="edit" data-id="${esc(p.id)}">${icon('i-edit')}Edit</button><button class="btn sm danger" type="button" data-p="del" data-id="${esc(p.id)}" aria-label="Delete ${esc(F.fullName(p))}">${icon('i-trash')}</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No one matches.</td></tr>'}
+        <td class="acts"><button class="btn sm" type="button" data-p="rel" data-id="${esc(p.id)}" title="Add relative" aria-label="Add a relative of ${esc(F.shortName(p))}">${icon('i-plus')}</button><button class="btn sm" type="button" data-p="edit" data-id="${esc(p.id)}">${icon('i-edit')}Edit</button><button class="btn sm danger" type="button" data-p="del" data-id="${esc(p.id)}" aria-label="Delete ${esc(F.fullName(p))}">${icon('i-trash')}</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No one matches.</td></tr>'}
       </tbody></table></div>${list.length > shown.length ? `<p class="muted">Showing 300 of ${list.length}. Search to narrow the list.</p>` : ''}`;
     const q = $('#pq', el);
     q.oninput = () => { peopleQuery = q.value; clearTimeout(adminPeople.t); adminPeople.t = setTimeout(() => { renderAdmin(); const n = $('#pq'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
@@ -1644,21 +1549,19 @@
         ${sw('show_elders', 'Our elders', 'Cards for the founders and their children.')}
         ${sw('relationship_finder', 'Relationship finder', 'The "How are we related?" section and the finder on each profile.')}
         ${sw('show_recent', 'Recently added', 'The newest names approved into the shijra.')}
-        ${sw('show_how', 'How to add your branch', 'The three steps and the call to add a member.')}
       </div>
       <div class="card"><h3>Tree</h3>
         <div class="field" style="margin-top:10px"><span class="lbl">Start the tree from</span><div id="sRoot"></div><span class="hint">Leave empty to start from the founding ancestor with the largest family.</span></div>
-        <div class="field" style="margin-top:10px;max-width:280px"><label for="sView">Family explorer opens as</label><select id="sView" name="default_view">${[['icons', 'Large icons'], ['details', 'Details list'], ['chart', 'Family chart']].map(([v, l]) => `<option value="${v}" ${(s.default_view || 'icons') === v ? 'selected' : ''}>${l}</option>`).join('')}</select><span class="hint">Visitors can switch views. Their choice is remembered on their device.</span></div>
+        <div class="field" style="margin-top:10px;max-width:280px"><label for="sView">Family explorer opens as</label><select id="sView" name="default_view">${[['icons', 'Large icons'], ['details', 'Details list'], ['chart', 'Tree view']].map(([v, l]) => `<option value="${v}" ${(s.default_view || 'icons') === v ? 'selected' : ''}>${l}</option>`).join('')}</select><span class="hint">Visitors can switch views. Their choice is remembered on their device.</span></div>
         <div class="field" style="margin-top:10px;max-width:280px"><label for="sDepth">Generations open when the page loads</label><select id="sDepth" name="default_depth">${[1, 2, 3, 4, 5, 8].map((n) => `<option value="${n}" ${Number(s.default_depth) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
         ${sw('show_spouses', 'Show husbands and wives', 'Display spouses next to each person in the tree.')}
         ${sw('show_generation', 'Show generation numbers', 'Roman numerals I, II, III on each card.')}
         ${sw('show_local_terms', 'Use family words for relations', 'Dada, Nani, Chacha, Khala, Bhabhi… alongside English.')}
       </div>
-      <div class="card"><h3>Visitor features</h3>
-        ${sw('submissions_open', 'Accept new members, edits and removal requests', 'Visitors can send entries for you to review.')}
-        ${sw('allow_photos', 'Allow photo uploads', 'Visitors can attach a photo to their entry.')}
-        ${sw('require_email', 'Require email from senders', 'So you can contact them about their entry.')}
-        ${sw('require_phone', 'Require phone from senders', 'Useful for WhatsApp follow-ups.')}
+      <div class="card"><h3>Form fields</h3><p class="muted" style="margin:4px 0 6px">Choose which fields appear when you add or edit someone. Name is always shown. Switching a field off hides it from the form but keeps anything already saved.</p>
+        ${FORM_FIELDS.map(([k, label]) => `<div class="switch"><div class="txt"><b>${esc(label)}</b></div><label class="toggle"><input type="checkbox" name="field_${k}" ${fieldOn(k) ? 'checked' : ''} aria-label="Show ${esc(label)} in the form"><span></span></label></div>`).join('')}
+      </div>
+      <div class="card"><h3>Viewer features</h3>
         ${sw('search_enabled', 'Search box', 'Search by name, nickname or city.')}
         ${sw('bot_enabled', 'Shijra Helper chat', 'The helper in the corner of every page.')}
         ${sw('bot_teaser', 'Helper greeting bubble', 'A short greeting that pops up a few seconds after the page opens.')}
@@ -1677,9 +1580,10 @@
       e.preventDefault();
       const f = e.target; const fd = new FormData(f); const next = { ...S.settings };
       for (const k of ['site_title', 'site_title_local', 'tagline', 'about', 'announcement', 'bot_welcome']) next[k] = (fd.get(k) || '').toString().trim();
-      for (const k of ['submissions_open', 'allow_photos', 'require_email', 'require_phone', 'search_enabled', 'relationship_finder', 'bot_enabled', 'bot_teaser', 'show_living_dates', 'show_spouses', 'show_generation', 'show_local_terms', 'show_founders', 'show_elders', 'show_recent', 'show_how']) next[k] = !!f.elements[k].checked;
+      for (const k of ['search_enabled', 'relationship_finder', 'bot_enabled', 'bot_teaser', 'show_living_dates', 'show_spouses', 'show_generation', 'show_local_terms', 'show_founders', 'show_elders', 'show_recent']) next[k] = !!f.elements[k].checked;
       next.default_depth = Number(fd.get('default_depth')) || 2;
       next.default_view = String(fd.get('default_view') || 'icons');
+      next.fields = Object.fromEntries(FORM_FIELDS.map(([k]) => [k, !!f.elements['field_' + k].checked]));
       next.root_id = rootPick.get();
       const b = $('button[type=submit]', f); b.disabled = true;
       try {
@@ -1706,7 +1610,6 @@
         <div class="stat"><b>${gens}</b><span>generations</span></div>
         <div class="stat"><b>${living}</b><span>living</span></div>
         <div class="stat"><b>${photos}</b><span>with photos</span></div>
-        <div class="stat"><b>${S.subs.filter((x) => x.status === 'pending').length}</b><span>waiting for review</span></div>
       </div>
       <div class="card"><h3>Back up the shijra</h3><p class="muted">Download everyone and all settings as one file. Keep a copy somewhere safe.</p><button class="btn" type="button" data-d="export">Download backup</button></div>
       <div class="card"><h3>Restore or import</h3><p class="muted">Upload a backup file. People with the same ID are updated and new people are added. Nobody is deleted.</p><input type="file" accept="application/json,.json" id="importFile" aria-label="Choose a backup file"><div class="form-error" id="impErr"></div></div>
@@ -1801,6 +1704,7 @@
       case 'xp-go': if (XP.min) xpMinimize(false); xpGo(id); scrollToExplorer(); break;
       case 'focus': reveal(id); if (window.innerWidth <= 640) closeDrawer(); break;
       case 'add': openAdd({}); break;
+      case 'tree-view': if (XP.min) xpMinimize(false); XP.view = 'chart'; ls.set('shijra-view', 'chart'); { const r = xpRoots(); xpGo(r.length === 1 ? r[0].id : null); } scrollToExplorer(); break;
       case 'add-rel': openRelChooser(id); break;
       case 'suggest': openSuggest(id); break;
       case 'remove-req': openRemoval(id); break;

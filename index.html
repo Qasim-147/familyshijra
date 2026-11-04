@@ -64,17 +64,17 @@
       <b id="navTitle">Family Shijra</b>
     </a>
     <nav class="nav-links" aria-label="Sections">
-      <a href="#tree">Family explorer</a><a href="#elders" data-sec="elders">Elders</a><a href="#relations" data-sec="relations">Find a relation</a><a href="#how" data-sec="how">How to join</a>
+      <a href="#tree">Family explorer</a><a href="#elders" data-sec="elders">Elders</a><a href="#relations" data-sec="relations">Find a relation</a>
     </nav>
     <div class="nav-actions">
       <button class="btn gold" id="addBtn" type="button"><svg><use href="#i-plus"/></svg><span class="label">Add member</span></button>
-      <button class="btn" id="adminBtn" type="button" aria-label="Admin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span class="label">Admin</span><span class="badge" id="pendingBadge" hidden>0</span></button>
+      <button class="btn" id="adminBtn" type="button" aria-label="Admin" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span class="label">Admin</span><span class="badge" id="pendingBadge" hidden></span></button>
       <button class="btn icon menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     </div>
   </div>
 </header>
 <nav class="mobile-menu" id="mobileMenu" hidden aria-label="Sections">
-  <a href="#tree">Family explorer</a><a href="#elders" data-sec="elders">Elders</a><a href="#relations" data-sec="relations">Find a relation</a><a href="#how" data-sec="how">How to join</a>
+  <a href="#tree">Family explorer</a><a href="#elders" data-sec="elders">Elders</a><a href="#relations" data-sec="relations">Find a relation</a>
 </nav>
 <div class="banner" id="banner" hidden><div class="wrap" id="bannerIn"></div></div>
 
@@ -89,7 +89,8 @@
         <p class="hero-facts" id="heroFacts"></p>
         <div class="hero-cta">
           <a class="btn gold" href="#tree">Open the family explorer</a>
-          <button class="btn on-dark" type="button" data-action="add" id="heroAdd">Add your name</button>
+          <button class="btn on-dark" type="button" data-action="tree-view" id="heroTree"><svg><use href="#i-chart"/></svg>View as tree</button>
+          <button class="btn on-dark" type="button" data-action="add" id="heroAdd" hidden>Add a family member</button>
           <button class="btn on-dark" type="button" data-action="open-bot" id="heroBot"><svg><use href="#i-chat"/></svg>Ask the helper</button>
         </div>
       </div>
@@ -198,30 +199,13 @@
     </div>
   </section>
 
-  <div class="divider" aria-hidden="true"><svg><use href="#i-star"/></svg></div>
-
-  <section class="section" id="how" aria-labelledby="howTitle">
-    <div class="wrap">
-      <details class="fold" open><summary class="section-head fold-head"><div><h2 id="howTitle">How to add your branch</h2><p class="lede">Anyone in the family can contribute. Nothing goes live until the family admin has checked it.</p></div><span class="fold-chev" aria-hidden="true"><svg><use href="#i-chev"/></svg></span></summary><div class="fold-body">
-      <ol class="steps">
-        <li><h3>Find your place</h3><p>Search for your father, mother or grandparent in the tree and open their card.</p></li>
-        <li><h3>Send your details</h3><p>Tap <b>Add relative</b>, choose how you are related, and add names, dates, cities and a photo.</p></li>
-        <li><h3>The admin approves</h3><p>The family admin checks each entry, corrects it if needed, and publishes it to the shijra.</p></li>
-      </ol>
-      <div class="band">
-        <div class="hero-pattern" aria-hidden="true"><svg><rect width="100%" height="100%" fill="url(#girih)"/></svg></div>
-        <div><h3>Is someone missing?</h3><p>Add a parent, child, husband, wife or anyone else you know belongs here.</p></div>
-        <button class="btn gold" type="button" data-action="add">Add a family member</button>
-      </div>
-    </div></details>
-    </div>
-  </section>
+  
 </main>
 
 <footer class="footer">
   <div class="wrap">
     <div><div class="urdu" id="footLocal" lang="ur">شجرۂ نسب</div><div id="footTitle">Family Shijra</div></div>
-    <div><a href="people/" id="footPeople">Browse all members</a></div>
+    <div class="foot-links"><a href="people/" id="footPeople">Browse all members</a><a href="#admin" id="footAdmin">Admin sign-in</a></div>
   </div>
 </footer>
 
