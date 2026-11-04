@@ -702,7 +702,7 @@
     if (!XP.started && S.people.length) {
       XP.started = true;
       const r = xpRoots();
-      if (r.length === 1 && !XP.folder) { XP.folder = r[0].id; XP.open.add(r[0].id); }
+      if (r.length === 1 && !XP.folder && isFull(r[0].id)) { XP.folder = r[0].id; XP.open.add(r[0].id); }
     }
     if (XP.folder && !S.idx.byId.has(XP.folder)) XP.folder = null;
     if (XP.sel && !S.idx.byId.has(XP.sel)) XP.sel = null;
@@ -1351,8 +1351,15 @@
   }
 
   // ---------- admin: person editor ----------
+  /** Admin-only actions explain why they can't run instead of doing nothing. */
+  function needAdmin() {
+    if (admin()) return true;
+    if (S.isAdmin && S.previewVisitor) toast('You are viewing as a visitor. Tap "Back to admin view" first.');
+    else toast('Sign in as admin to do this.');
+    return false;
+  }
   function openEditor(id, pre = {}) {
-    if (!admin()) return;
+    if (!needAdmin()) return;
     const existing = id ? S.allPeople.find((x) => x.id === id) : null;
     let p = existing ? { ...existing } : { id: F.uid(), visible: true, spouse_ids: [], is_living: true };
     if (pre.values) p = { ...p, ...Object.fromEntries(Object.entries(pre.values).filter(([k, v]) => v !== null && v !== '' && k !== 'remove_photo')) };
@@ -1450,7 +1457,7 @@
     if (S.settings.root_id === id) await S.store.saveSettings({ ...S.settings, root_id: null });
   }
   async function askDelete(id) {
-    const p = S.allPeople.find((x) => x.id === id); if (!p || !admin()) return false;
+    const p = S.allPeople.find((x) => x.id === id); if (!p || !needAdmin()) return false;
     const kids = S.allPeople.filter((q) => q.father_id === id || q.mother_id === id).length;
     const ok = await confirmBox(`Delete ${F.shortName(p)}?`, `${F.fullName(p)} will be removed from the shijra.${kids ? ` Their ${kids} child${kids === 1 ? '' : 'ren'} will stay but lose this parent link.` : ''} This can't be undone. To keep them but hide them from visitors, use Edit and turn off "Show on the public shijra" instead.`);
     if (!ok) return false;
@@ -1459,7 +1466,11 @@
   }
 
   // ---------- admin panel ----------
-  function openAdmin() { S.adminOpen = true; setHash('admin'); document.body.classList.add('no-scroll'); renderAdmin(); }
+  function openAdmin() {
+    // The admin panel always works as admin, so leave "View as visitor" first.
+    if (S.previewVisitor) { S.previewVisitor = false; applySettings(); applyVisibility(); }
+    S.adminOpen = true; setHash('admin'); document.body.classList.add('no-scroll'); renderAdmin();
+  }
   function closeAdmin() { S.adminOpen = false; $('#adminHost').innerHTML = ''; document.body.classList.toggle('no-scroll', XP.max); if (location.hash === '#admin') setHash(''); }
 
   function renderAdmin() {
