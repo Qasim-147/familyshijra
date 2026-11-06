@@ -1,0 +1,13 @@
+# Netlify: builds the site plus one search-engine page per family member into dist/.
+[build]
+  command = "SITE_URL=${URL}/ node scripts/prerender.mjs"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Always load the newest app code after a deploy.
+[[headers]]
+  for = "/assets/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

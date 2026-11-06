@@ -1,46 +1,35 @@
-name: Build and deploy
+name: Rebuild on Netlify
+
+# Netlify builds and publishes the site itself on every push (see netlify.toml).
+# This workflow only asks Netlify to rebuild every 6 hours, so search-engine pages pick up
+# people the admin added since the last push. It needs a repository secret named
+# NETLIFY_BUILD_HOOK (Netlify → Site configuration → Build & deploy → Build hooks → Add build hook).
+# Without that secret it just checks that the site builds.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:        # "Run workflow" button in the Actions tab
   schedule:
-    - cron: '17 */6 * * *'  # every 6 hours: refresh search-engine pages with newly approved people
+    - cron: '17 */6 * * *'
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  build:
+  rebuild:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - id: pages
-        uses: actions/configure-pages@v5
-      - name: Build site and SEO pages
+      - name: Check that the site builds
         run: node scripts/prerender.mjs
+      - name: Ask Netlify to rebuild
         env:
-          # Uses your custom domain automatically if you set one in Settings → Pages.
-          SITE_URL: ${{ vars.SITE_URL || steps.pages.outputs.base_url }}
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "No NETLIFY_BUILD_HOOK secret set, so Netlify was not asked to rebuild. Netlify still rebuilds on every push."
+          else
+            curl -fsS -X POST -d '{}' "$HOOK" && echo "Netlify rebuild requested."
+          fi

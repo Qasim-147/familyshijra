@@ -59,9 +59,16 @@ Open http://localhost:8000. Without Supabase configured it runs in **setup previ
 
 **Custom domain** (e.g. `deshpandefamily.in`): add it in Settings → Pages, create the DNS records GitHub shows you, and add a file named `CNAME` containing the domain. Also add it to Supabase **Authentication → URL Configuration → Site URL** so password-reset emails link back correctly.
 
+## 3b. Or publish on Netlify
+
+1. Netlify → **Add new site → Import an existing project → GitHub** → pick this repository.
+2. Netlify reads `netlify.toml` (build command `node scripts/prerender.mjs`, publish folder `dist`), so leave the build settings as they are and deploy.
+3. In Supabase **Authentication → URL Configuration**, set **Site URL** to the Netlify address so password-reset emails link back correctly.
+4. Optional: Netlify → **Build & deploy → Build hooks** → add one, then add it in GitHub as the repository secret `NETLIFY_BUILD_HOOK`. The **Rebuild on Netlify** workflow then refreshes search-engine pages every 6 hours.
+
 ## 4. First steps as admin
 
-1. Open the site → **Admin sign-in** (link in the footer; the Admin button only shows once you are signed in) → sign in.
+1. Open the site → **Admin login** (top right) → sign in.
 2. **Data → Restore or import**: optionally upload `sample-family.json` to see a demo, then **Remove sample people** when you're ready.
 3. **People → Add person**: start with the eldest ancestor, then add children using the **Father / Mother** fields.
 4. **Settings**: site name, tagline, about text (used by Google), which ancestor the tree starts from, and feature switches.

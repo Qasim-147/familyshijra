@@ -7,5 +7,5 @@ window.FAMILY_CONFIG = {
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhpd2JzcndheHlwZ2hydm51dWlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MjkxMjEsImV4cCI6MjEwOTIwNTEyMX0.4skCwa7RGbDh-9uK05qQbiSAVI8k4EAHDSmdSQFHZv0',
   photoBucket: 'photos',
   // Full public address of the site, used for share links. Example: 'https://yourname.github.io/family-tree/'
-  siteUrl: 'https://qasim-147.github.io/familyshijra/',
+  siteUrl: '',
 };

@@ -173,7 +173,7 @@
     $('#searchBox').hidden = !s.search_enabled;
     const canAdd = admin();
     $('#addBtn').hidden = !canAdd; $('#heroAdd').hidden = !canAdd;
-    $('#adminBtn').hidden = !S.isAdmin;
+    $('#adminBtn').hidden = false; $('#adminBtn .label').textContent = S.isAdmin ? 'Admin' : 'Admin login';
     $('#heroBot').hidden = !s.bot_enabled;
     $('#elders').hidden = !s.show_elders; $('#relations').hidden = !s.relationship_finder;
     $$('[data-sec="elders"]').forEach((a) => { a.hidden = !s.show_elders; });
