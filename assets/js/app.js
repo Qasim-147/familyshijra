@@ -173,7 +173,9 @@
     $('#searchBox').hidden = !s.search_enabled;
     const canAdd = admin();
     $('#addBtn').hidden = !canAdd; $('#heroAdd').hidden = !canAdd;
-    $('#adminBtn').hidden = !S.isAdmin;
+    // Always reachable: signed-out visitors get the sign-in form, admins get the panel.
+    $('#adminBtn').hidden = false;
+    $('#adminBtn .label').textContent = S.isAdmin ? 'Admin' : 'Admin sign in';
     $('#heroBot').hidden = !s.bot_enabled;
     $('#elders').hidden = !s.show_elders; $('#relations').hidden = !s.relationship_finder;
     $$('[data-sec="elders"]').forEach((a) => { a.hidden = !s.show_elders; });
