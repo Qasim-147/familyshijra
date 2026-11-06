@@ -733,8 +733,16 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
 .lane-unknown { width: 150px; padding: 18px 10px; color: var(--muted); font-size: .82rem; border-style: dashed; cursor: default; box-shadow: none; background: var(--surface-2); }
 .lane-unknown:hover { transform: none; box-shadow: none; }
 
-/* Description under each person in the tree view */
-.node .desc { margin: 8px 0 0; font-size: .74rem; line-height: 1.35; color: var(--muted); text-align: center;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* Description: hidden in the tree, shown as a pop-up when pointing at the photo or name */
+.node .desc { display: none; position: absolute; left: 50%; top: calc(100% + 24px); transform: translateX(-50%); z-index: 40;
+  width: 260px; max-height: 240px; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 12px; text-align: left;
+  background: var(--ink); color: var(--surface); font-size: .8rem; line-height: 1.45; box-shadow: var(--shadow-lg);
+  overflow-wrap: anywhere; pointer-events: none; white-space: pre-line; }
+.node .desc::before { content: ""; position: absolute; top: -6px; left: 50%; margin-left: -6px; border: 6px solid transparent; border-top: 0; border-bottom-color: var(--ink); }
+.node .portrait:hover ~ .desc, .node .name:hover ~ .desc { display: block; }
+.node:has(.portrait:hover), .node:has(.name:hover) { z-index: 40; }
+.node .portrait, .node .name { cursor: pointer; }
+/* Admin: edit / add relative / delete buttons always visible on each tree card */
+.couple.has-tools .node-tools { opacity: 1; }
 /* Typed entries appear in capitals while the admin types */
 .modal-form input[type="text"], .modal-form input:not([type]), .modal-form textarea { text-transform: uppercase; }

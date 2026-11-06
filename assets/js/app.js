@@ -244,7 +244,7 @@
       ${up}${S.settings.show_generation && !opts.spouse ? `<span class="gen" title="Generation ${gen}">${roman(gen)}</span>` : ''}
       ${portraitHTML(p)}
       <div class="name">${esc(F.shortName(p))}</div>
-      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${p.bio ? `<p class="desc" title="${esc(p.bio)}">${esc(p.bio)}</p>` : ''}${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
+      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${p.bio ? `<p class="desc" role="tooltip">${esc(p.bio)}</p>` : ''}${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
     </div>`;
   }
 
@@ -263,7 +263,7 @@
       h += `<button class="expand ${open ? 'open' : ''}" type="button" data-action="toggle" data-id="${esc(id)}" aria-expanded="${open}">${open ? 'Hide' : 'Show'} ${cg.partners.length} ${many}${cg.total ? ` & ${cg.total} ${cg.total === 1 ? 'child' : 'children'}` : ''}</button>`;
       if (open) {
         h += `<ul class="${S.justOpened === id ? 'grow' : ''}">`;
-        const lane = (head, list) => `<li class="lane"><div class="couple">${head}</div>${list.length ? `<ul>${list.map((k) => branchHTML(k.id, gen + 1, seen, false)).join('')}</ul>` : ''}</li>`;
+        const lane = (head, list) => `<li class="lane"><div class="couple ${admin() ? 'has-tools' : ''}">${head}</div>${list.length ? `<ul>${list.map((k) => branchHTML(k.id, gen + 1, seen, false)).join('')}</ul>` : ''}</li>`;
         for (const g of cg.groups) h += lane(nodeHTML(g.partner, gen, { spouse: true, rank: g.rank }), g.kids);
         if (cg.rest.length) h += lane(`<div class="node lane-unknown">${p.gender === 'female' ? 'Father' : 'Mother'} not recorded</div>`, cg.rest);
         h += '</ul>';
