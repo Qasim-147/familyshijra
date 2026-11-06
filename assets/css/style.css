@@ -478,6 +478,8 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
   .menu-btn { display: inline-flex; }
   .nav-actions { margin-left: auto; }
   .nav-actions .label { display: none; }
+  .nav-actions #adminBtn .label { display: inline; font-size: .85em; }
+  .nav-actions .btn#adminBtn { width: auto; padding: 0 12px; gap: 6px; }
   .nav-actions .btn:not(.icon) { width: 42px; padding: 0; }
 }
 @media (max-width: 640px) {
