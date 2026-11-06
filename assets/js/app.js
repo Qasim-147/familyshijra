@@ -172,8 +172,9 @@
     $('#heroTagline').textContent = s.tagline || '';
     $('#searchBox').hidden = !s.search_enabled;
     const canAdd = admin();
-    $('#addBtn').hidden = !canAdd; $('#heroAdd').hidden = !canAdd;
-    $('#adminBtn').hidden = !S.isAdmin;
+    // Header buttons stay visible for everyone: visitors are taken to the admin sign-in.
+    $('#addBtn').hidden = false; $('#heroAdd').hidden = !canAdd;
+    $('#adminBtn').hidden = false;
     $('#heroBot').hidden = !s.bot_enabled;
     $('#elders').hidden = !s.show_elders; $('#relations').hidden = !s.relationship_finder;
     $$('[data-sec="elders"]').forEach((a) => { a.hidden = !s.show_elders; });
@@ -1720,7 +1721,7 @@
       default:
     }
   });
-  $('#addBtn').onclick = () => openAdd({});
+  $('#addBtn').onclick = () => { if (admin()) openAdd({}); else { openAdmin(); toast('Sign in as admin to add family members.'); } };
   $('#adminBtn').onclick = () => (S.adminOpen ? closeAdmin() : openAdmin());
   $('#brandLink').onclick = () => { closeDrawer(); if (S.people.length) { const r = xpRoots(); xpGo(r.length === 1 ? r[0].id : null); } };
   $('#menuBtn').onclick = () => { const m = $('#mobileMenu'); m.hidden = !m.hidden; $('#menuBtn').setAttribute('aria-expanded', !m.hidden); };
