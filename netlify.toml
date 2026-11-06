@@ -1,0 +1,5 @@
+# Build the same way the GitHub Pages workflow does: pre-render person pages,
+# sitemap and robots.txt into ./dist, using this site's Netlify address.
+[build]
+  command = "SITE_URL=${SITE_URL:-$URL} node scripts/prerender.mjs"
+  publish = "dist"
