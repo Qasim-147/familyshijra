@@ -244,7 +244,7 @@
       ${up}${S.settings.show_generation && !opts.spouse ? `<span class="gen" title="Generation ${gen}">${roman(gen)}</span>` : ''}
       ${portraitHTML(p)}
       <div class="name">${esc(F.shortName(p))}</div>
-      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
+      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${p.bio ? `<p class="desc" title="${esc(p.bio)}">${esc(p.bio)}</p>` : ''}${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
     </div>`;
   }
 

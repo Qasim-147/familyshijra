@@ -6,6 +6,7 @@
     'birth_date', 'birth_place', 'death_date', 'death_place', 'is_living', 'current_place', 'occupation', 'bio',
     'photo_url', 'father_id', 'mother_id', 'spouse_ids', 'visible', 'sample', 'created_at', 'entered_by'];
   const pickPerson = (p) => {
+    p = root.Family ? root.Family.upperPerson(p) : p;
     const o = {};
     for (const k of PERSON_COLS) if (k in p) o[k] = p[k] === '' ? null : p[k];
     o.spouse_ids = Array.isArray(p.spouse_ids) ? p.spouse_ids : [];
@@ -39,7 +40,7 @@
       }
       return out;
     }
-    const loadPeople = async () => { cache.people = await fetchAll('people'); emit('people'); };
+    const loadPeople = async () => { cache.people = (await fetchAll('people')).map(Family.upperPerson); emit('people'); };
     const loadSettings = async () => {
       const { data } = await sb.from('settings').select('data').eq('id', 1).maybeSingle();
       cache.settings = (data && data.data) || {}; emit('settings');
@@ -176,6 +177,7 @@
           } catch (e) { /* no sample file */ }
           persist();
         }
+        state.people = state.people.map(Family.upperPerson);
         return { isAdmin: true, canSubmit: true, setupMode: true };
       },
       subscribePeople(fn) { listeners.people.add(fn); fn(state.people); return () => listeners.people.delete(fn); },

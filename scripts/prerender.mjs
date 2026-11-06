@@ -37,7 +37,7 @@ async function loadData() {
   if (!configured) {
     console.log('Supabase not configured — building from sample-family.json');
     const s = JSON.parse(readFileSync(path.join(root, 'sample-family.json'), 'utf8'));
-    return { people: s.people.map((p) => ({ ...p, slug: p.slug || F.slugify(p) })), settings: s.settings || {} };
+    return { people: s.people.map((p) => F.upperPerson({ ...p, slug: p.slug || F.slugify(p) })), settings: s.settings || {} };
   }
   const people = [];
   for (let from = 0; ; from += 1000) {
@@ -46,7 +46,7 @@ async function loadData() {
     if (page.length < 1000) break;
   }
   const st = await rest('settings?select=data&id=eq.1');
-  return { people, settings: (st[0] && st[0].data) || {} };
+  return { people: people.map(F.upperPerson), settings: (st[0] && st[0].data) || {} };
 }
 
 // ---------- templates ----------

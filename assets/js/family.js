@@ -47,6 +47,16 @@
   };
   F.validDate = (d) => !d || /^\d{4}(-\d{1,2}(-\d{1,2})?)?$/.test(String(d).trim());
 
+  // Everything the admin types is shown in capital letters.
+  F.TEXT_FIELDS = ['first_name', 'middle_name', 'last_name', 'maiden_name', 'nickname', 'birth_place', 'death_place',
+    'current_place', 'occupation', 'bio', 'entered_by'];
+  F.upperPerson = (p) => {
+    if (!p) return p;
+    const o = { ...p };
+    for (const k of F.TEXT_FIELDS) if (typeof o[k] === 'string') o[k] = o[k].toLocaleUpperCase('en');
+    return o;
+  };
+
   F.slugify = (p) => {
     const base = F.shortName(p).normalize('NFKD').replace(/[̀-ͯ]/g, '')
       .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'member';
