@@ -40,12 +40,29 @@
     const s = String(d).trim();
     const m = s.match(/^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/);
     if (!m) return s;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    if (m[3]) return `${parseInt(m[3], 10)} ${months[parseInt(m[2], 10) - 1] || ''} ${m[1]}`.replace(/\s+/g, ' ');
-    if (m[2]) return `${months[parseInt(m[2], 10) - 1] || ''} ${m[1]}`.trim();
+    const mon = F.MONTHS[parseInt(m[2], 10) - 1];
+    if (m[3] && mon) return `${String(parseInt(m[3], 10)).padStart(2, '0')}-${mon}-${m[1]}`;
+    if (m[2] && mon) return `${mon}-${m[1]}`;
     return m[1];
   };
-  F.validDate = (d) => !d || /^\d{4}(-\d{1,2}(-\d{1,2})?)?$/.test(String(d).trim());
+  F.MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /** Reads what the admin typed ("15-Aug-1950", "15/08/1950", "1950-08-15", "Aug-1950", "1950")
+      and returns the stored form ("1950-08-15", "1950-08", "1950"), or null if it is not a real date. */
+  F.parseDate = (input) => {
+    const s = String(input || '').trim().replace(/[\s/.,]+/g, '-').replace(/-+/g, '-');
+    if (!s) return '';
+    const mon = (t) => { if (/^\d{1,2}$/.test(t)) return +t; const i = F.MONTHS.findIndex((m) => m.toLowerCase() === t.slice(0, 3).toLowerCase()); return i >= 0 && t.length >= 3 ? i + 1 : 0; };
+    const ok = (y, m, d) => { if (y < 1000 || y > 2200) return false; if (!m) return true; if (m < 1 || m > 12) return false; if (!d) return true; return d >= 1 && d <= new Date(y, m, 0).getDate(); };
+    const out = (y, m, d) => (ok(y, m, d) ? [String(y), m && String(m).padStart(2, '0'), d && String(d).padStart(2, '0')].filter(Boolean).join('-') : null);
+    let r;
+    if ((r = s.match(/^(\d{4})$/))) return out(+r[1]);
+    if ((r = s.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/))) return out(+r[1], +r[2], r[3] ? +r[3] : 0);
+    if ((r = s.match(/^(\d{1,2})-([A-Za-z]{3,}|\d{1,2})-(\d{4})$/))) { const m = mon(r[2]); return m ? out(+r[3], m, +r[1]) : null; }
+    if ((r = s.match(/^([A-Za-z]{3,}|\d{1,2})-(\d{4})$/))) { const m = mon(r[1]); return m ? out(+r[2], m) : null; }
+    if ((r = s.match(/^([A-Za-z]{3,})-(\d{1,2})-(\d{4})$/))) { const m = mon(r[1]); return m ? out(+r[3], m, +r[2]) : null; }
+    return null;
+  };
+  F.validDate = (d) => !d || F.parseDate(d) !== null;
 
   // Everything the admin types is shown in capital letters.
   F.TEXT_FIELDS = ['first_name', 'middle_name', 'last_name', 'maiden_name', 'nickname', 'birth_place', 'death_place',
@@ -70,9 +87,11 @@
     });
 
   const birthKey = (p) => {
-    const s = String(p.birth_date || '').trim();
+    const s = String((p && p.birth_date) || '').trim();
     return s ? s.padEnd(10, '0') : '9999';
   };
+  /** Oldest first by date of birth; people without a date keep the order the admin entered them. */
+  F.byAge = (a, b) => birthKey(a).localeCompare(birthKey(b)) || String((a && a.created_at) || '').localeCompare(String((b && b.created_at) || '')) || F.fullName(a).localeCompare(F.fullName(b));
 
   /** Index people for fast lookups. */
   F.buildIndex = (people) => {
@@ -88,7 +107,7 @@
         if (s !== p.id && byId.has(s)) { spouses.get(p.id).add(s); spouses.get(s).add(p.id); }
       }
     }
-    for (const [, list] of children) list.sort((a, b) => birthKey(byId.get(a)).localeCompare(birthKey(byId.get(b))));
+    for (const [, list] of children) list.sort((a, b) => F.byAge(byId.get(a), byId.get(b)));
     return { byId, children, spouses, people };
   };
 
@@ -99,7 +118,7 @@
   F.siblings = (idx, p) => {
     const set = new Set();
     for (const par of F.parents(idx, p)) for (const c of idx.children.get(par.id) || []) if (c !== p.id) set.add(c);
-    return [...set].map((id) => idx.byId.get(id)).sort((a, b) => birthKey(a).localeCompare(birthKey(b)));
+    return [...set].map((id) => idx.byId.get(id)).sort(F.byAge);
   };
   F.countDescendants = (idx, id, seen = new Set()) => {
     if (seen.has(id)) return 0; seen.add(id);

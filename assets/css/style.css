@@ -733,15 +733,29 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
 .lane-unknown { width: 150px; padding: 18px 10px; color: var(--muted); font-size: .82rem; border-style: dashed; cursor: default; box-shadow: none; background: var(--surface-2); }
 .lane-unknown:hover { transform: none; box-shadow: none; }
 
-/* Description: hidden in the tree, shown as a pop-up when pointing at the photo or name */
-.node .desc { display: none; position: absolute; left: 50%; top: calc(100% + 24px); transform: translateX(-50%); z-index: 40;
-  width: 260px; max-height: 240px; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 12px; text-align: left;
-  background: var(--ink); color: var(--surface); font-size: .8rem; line-height: 1.45; box-shadow: var(--shadow-lg);
-  overflow-wrap: anywhere; pointer-events: none; white-space: pre-line; }
-.node .desc::before { content: ""; position: absolute; top: -6px; left: 50%; margin-left: -6px; border: 6px solid transparent; border-top: 0; border-bottom-color: var(--ink); }
-.node .portrait:hover ~ .desc, .node .name:hover ~ .desc { display: block; }
-.node:has(.portrait:hover), .node:has(.name:hover) { z-index: 40; }
-.node .portrait, .node .name { cursor: pointer; }
+/* Description that follows the mouse over a member's photo or name */
+.hover-desc { position: fixed; left: 0; top: 0; z-index: 300; width: max-content; max-width: min(320px, calc(100vw - 28px));
+  max-height: 260px; overflow: hidden; padding: 10px 13px; border-radius: 12px; pointer-events: none;
+  background: var(--ink); color: var(--surface); box-shadow: var(--shadow-lg); font-size: .82rem; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.hover-desc b { display: block; margin-bottom: 4px; font-size: .78rem; letter-spacing: .04em; color: var(--gold-bright); }
+.hover-desc[hidden] { display: none; }
+.node .portrait img, .xp-item img, .rel .portrait img, .xp-d-hero .portrait img, .drawer .portrait img { cursor: zoom-in; }
+/* Enlarged photo */
+.photo-view { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 24px;
+  background: rgba(10, 20, 18, .86); animation: pvIn .18s ease; }
+.photo-view figure { margin: 0; display: grid; gap: 10px; justify-items: center; }
+.photo-view img { max-width: min(92vw, 900px); max-height: 80vh; object-fit: contain; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.5); background: #fff; }
+.photo-view figcaption { color: #fff; font-weight: 600; letter-spacing: .05em; text-align: center; }
+.photo-close { position: absolute; top: 16px; right: 16px; width: 44px; height: 44px; border-radius: 50%; border: 0;
+  background: rgba(255,255,255,.14); color: #fff; font-size: 1.2rem; cursor: pointer; }
+.photo-close:hover, .photo-close:focus-visible { background: rgba(255,255,255,.28); }
+@keyframes pvIn { from { opacity: 0; } to { opacity: 1; } }
+/* Date box with calendar button */
+.date-in { position: relative; display: flex; gap: 6px; }
+.date-in input[type=text] { flex: 1; min-width: 0; text-transform: none !important; }
+.cal-btn { flex: none; width: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--accent, currentColor); cursor: pointer; display: grid; place-items: center; }
+.cal-btn:hover, .cal-btn:focus-visible { border-color: var(--accent, #1f6f5c); }
+.cal-native { position: absolute; right: 0; bottom: 0; width: 44px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
 /* Admin: edit / add relative / delete buttons always visible on each tree card */
 .couple.has-tools .node-tools { opacity: 1; }
 /* Typed entries appear in capitals while the admin types */

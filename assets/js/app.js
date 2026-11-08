@@ -244,7 +244,7 @@
       ${up}${S.settings.show_generation && !opts.spouse ? `<span class="gen" title="Generation ${gen}">${roman(gen)}</span>` : ''}
       ${portraitHTML(p)}
       <div class="name">${esc(F.shortName(p))}</div>
-      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${p.bio ? `<p class="desc" role="tooltip">${esc(p.bio)}</p>` : ''}${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
+      <div class="years">${esc(F.years(p, hideDates)) || '&nbsp;'}</div>${opts.rank ? `<span class="rank">${esc(opts.rank)}</span>` : ''}${you}${tools}
     </div>`;
   }
 
@@ -551,7 +551,7 @@
   }
   const sortFns = {
     name: (a, b) => F.fullName(a).localeCompare(F.fullName(b)),
-    birth: (a, b) => String(a.birth_date || '9999').localeCompare(String(b.birth_date || '9999')),
+    birth: F.byAge,
     place: (a, b) => String(a.birth_place || '~').localeCompare(String(b.birth_place || '~')),
     contents: (a, b) => kidsOf(a.id).length - kidsOf(b.id).length,
     rel: (a, b) => xpSub(a).localeCompare(xpSub(b)),
@@ -602,7 +602,7 @@
         if (XP.shut.has(g.key)) continue;
         html += '<div class="xp-icons">';
         for (const p of g.items) {
-          html += `<div class="xp-item ${sel(p)} ${p.visible === false ? 'hidden-person' : ''}" data-xid="${esc(p.id)}" role="option" aria-selected="${XP.sel === p.id}" title="${esc(F.fullName(p))}">${folderIcon(p)}<div class="xp-iname">${esc(F.shortName(p))}</div><div class="xp-isub">${esc(xpSub(p))}</div>${meTag(p)}</div>`;
+          html += `<div class="xp-item ${sel(p)} ${p.visible === false ? 'hidden-person' : ''}" data-xid="${esc(p.id)}" role="option" aria-selected="${XP.sel === p.id}">${folderIcon(p)}<div class="xp-iname">${esc(F.shortName(p))}</div><div class="xp-isub">${esc(xpSub(p))}</div>${meTag(p)}</div>`;
         }
         html += '</div>';
       }
@@ -1224,6 +1224,11 @@
   function personFieldsHTML(p = {}, { prefix = 'f' } = {}) {
     const on = fieldOn;
     const txt = (k, id, label, extra = '', cls = '') => (on(k) ? `<div class="field" ${cls}><label for="${prefix}${id}">${label}</label><input id="${prefix}${id}" name="${k}" type="text" maxlength="120" value="${esc(p[k])}" ${extra}></div>` : '');
+    const dateIn = (k, id, label, cls = '') => (on(k) ? `<div class="field" ${cls}><label for="${prefix}${id}">${label}</label>
+      <div class="date-in"><input id="${prefix}${id}" name="${k}" type="text" maxlength="20" value="${esc(F.fmtDate(p[k]))}" placeholder="dd-mmm-yyyy, e.g. 15-Aug-1950" autocomplete="off">
+      <button type="button" class="cal-btn" data-cal aria-label="Pick ${label.toLowerCase()} from a calendar" title="Calendar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+      <input type="date" class="cal-native" tabindex="-1" aria-hidden="true" min="1000-01-01" max="${new Date().toISOString().slice(0, 10)}"></div>
+      <span class="hint">Type it, or pick from the calendar. A year alone (1950) is fine.</span></div>` : '');
     const enteredBy = p.entered_by || ls.get('shijra-entered-by') || '';
     return `
     ${on('entered_by') ? `<div class="field"><label for="${prefix}By">Entered by *</label><input id="${prefix}By" name="entered_by" type="text" required maxlength="80" value="${esc(enteredBy)}" placeholder="Name of the admin making this entry" autocomplete="name"><span class="hint">Remembered on this device for your next entry.</span></div>` : ''}
@@ -1243,9 +1248,9 @@
         <label><input type="radio" name="is_living" value="no" ${isDead(p) ? 'checked' : ''}><span>Passed away</span></label>
       </div></div>` : ''}
     <div class="grid2">
-      ${txt('birth_date', 'Birth', 'Date of birth', 'inputmode="numeric" placeholder="1950 or 1950-08-15"')}
+      ${dateIn('birth_date', 'Birth', 'Date of birth')}
       ${txt('birth_place', 'BirthPlace', 'Place of birth')}
-      ${txt('death_date', 'Death', 'Date of passing', 'inputmode="numeric" placeholder="1900 or 1900-03-02"', 'data-dead')}
+      ${dateIn('death_date', 'Death', 'Date of passing', 'data-dead')}
       ${txt('death_place', 'DeathPlace', 'Place of passing', '', 'data-dead')}
       ${txt('current_place', 'Current', 'Lives in', '', 'data-alive')}
       ${txt('occupation', 'Occ', 'Occupation')}
@@ -1262,6 +1267,15 @@
       $$('[data-alive]', form).forEach((x) => { x.hidden = dead; });
     };
     $$('input[name=is_living]', form).forEach((r) => r.addEventListener('change', sync)); sync();
+    $$('.date-in', form).forEach((box) => {
+      const text = box.querySelector('input[type=text]'), nat = box.querySelector('.cal-native');
+      box.querySelector('[data-cal]').addEventListener('click', () => {
+        const v = F.parseDate(text.value); nat.value = v && v.length === 10 ? v : '';
+        try { nat.showPicker(); } catch (e) { nat.focus(); nat.click(); }
+      });
+      nat.addEventListener('change', () => { if (nat.value) { text.value = F.fmtDate(nat.value); text.dispatchEvent(new Event('input', { bubbles: true })); } });
+      text.addEventListener('blur', () => { const v = F.parseDate(text.value); if (v) text.value = F.fmtDate(v); });
+    });
     const file = form.querySelector('input[name=photo]');
     if (file) file.addEventListener('change', () => {
       const f = file.files[0]; const prev = file.closest('.photo-pick').firstElementChild;
@@ -1275,6 +1289,7 @@
       if (!form.querySelector(`[name="${k}"]`)) continue;
       const v = (fd.get(k) || '').toString().trim(); o[k] = v || null;
     }
+    for (const k of ['birth_date', 'death_date']) if (o[k]) { const d = F.parseDate(o[k]); if (d) o[k] = d; }
     if (form.querySelector('input[name=is_living]')) {
       o.is_living = fd.get('is_living') !== 'no';
       if (o.is_living) { if ('death_date' in o) o.death_date = null; if ('death_place' in o) o.death_place = null; } else if ('current_place' in o) o.current_place = null;
@@ -1285,7 +1300,7 @@
     $$('.field.err', form).forEach((x) => x.classList.remove('err'));
     const errs = [];
     if (!o.first_name) { errs.push('Enter a first name.'); form.querySelector('[name=first_name]').closest('.field').classList.add('err'); }
-    for (const k of ['birth_date', 'death_date']) if (o[k] && !F.validDate(o[k])) { errs.push('Write dates as a year (1950) or year-month-day (1950-08-15).'); form.querySelector(`[name=${k}]`)?.closest('.field')?.classList.add('err'); }
+    for (const k of ['birth_date', 'death_date']) if (o[k] && !F.validDate(o[k])) { errs.push('Write dates like 15-Aug-1950, or just the year (1950), or use the calendar.'); form.querySelector(`[name=${k}]`)?.closest('.field')?.classList.add('err'); }
     if (form.querySelector('[name=entered_by]') && !o.entered_by) { errs.push('Enter the name of the admin making this entry.'); form.querySelector('[name=entered_by]').closest('.field').classList.add('err'); }
     return errs;
   }
@@ -1494,7 +1509,7 @@
   let peopleQuery = '', peopleFilter = 'all';
   function adminPeople(el) {
     const idx = F.buildIndex(S.allPeople);
-    let list = peopleQuery ? F.search(idx, peopleQuery, 5000) : [...S.allPeople].sort((a, b) => F.fullName(a).localeCompare(F.fullName(b)));
+    let list = peopleQuery ? F.search(idx, peopleQuery, 5000) : [...S.allPeople].sort(F.byAge);
     if (peopleFilter === 'hidden') list = list.filter((p) => p.visible === false);
     if (peopleFilter === 'nophoto') list = list.filter((p) => !p.photo_url);
     if (peopleFilter === 'unlinked') list = list.filter((p) => !p.father_id && !p.mother_id && !(idx.spouses.get(p.id) || new Set()).size && !(idx.children.get(p.id) || []).length);
@@ -1725,8 +1740,57 @@
   $('#brandLink').onclick = () => { closeDrawer(); if (S.people.length) { const r = xpRoots(); xpGo(r.length === 1 ? r[0].id : null); } };
   $('#menuBtn').onclick = () => { const m = $('#mobileMenu'); m.hidden = !m.hidden; $('#menuBtn').setAttribute('aria-expanded', !m.hidden); };
   $('#mobileMenu').onclick = (e) => { if (e.target.closest('a')) { $('#mobileMenu').hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); } };
+  // ---------- photo viewer: double-click a photo to see it large ----------
+  function openPhoto(src, caption) {
+    closePhoto();
+    const box = document.createElement('div');
+    box.id = 'photoView'; box.className = 'photo-view'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', caption || 'Photo');
+    box.innerHTML = `<figure><img src="${esc(src)}" alt="${esc(caption || '')}">${caption ? `<figcaption>${esc(caption)}</figcaption>` : ''}</figure><button type="button" class="photo-close" aria-label="Close photo">✕</button>`;
+    box.addEventListener('click', (e) => { if (!e.target.closest('img')) closePhoto(); });
+    document.body.appendChild(box); hideDesc();
+    box.querySelector('.photo-close').focus();
+  }
+  function closePhoto() { const b = $('#photoView'); if (b) b.remove(); }
+  document.addEventListener('dblclick', (e) => {
+    const img = e.target.closest('.portrait img, .xp-item img, .xp-trow img');
+    if (!img) return;
+    e.preventDefault(); e.stopPropagation();
+    const holder = img.closest('[data-id], [data-xid]');
+    const p = holder && S.idx && S.idx.byId.get(holder.dataset.id || holder.dataset.xid);
+    openPhoto(img.currentSrc || img.src, p ? F.fullName(p) : img.alt);
+  }, true);
+
+  // ---------- description that follows the mouse over a member's photo or name ----------
+  const descTip = document.createElement('div');
+  descTip.className = 'hover-desc'; descTip.setAttribute('role', 'tooltip'); descTip.hidden = true;
+  document.body.appendChild(descTip);
+  let descFor = null;
+  function hideDesc() { descTip.hidden = true; descFor = null; }
+  const DESC_TARGETS = '.node .portrait, .node .name, .xp-item, .xp-trow .who, .rel .portrait, .rel b, .elder .portrait, .elder b, .xp-d-hero .portrait, .xp-d-hero h3';
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse' || $('#photoView')) return;
+    const t = e.target.closest && e.target.closest(DESC_TARGETS);
+    const holder = t && t.closest('[data-id], [data-xid], .xp-d');
+    const id = holder && (holder.dataset.id || holder.dataset.xid || XP.sel);
+    const p = id && S.idx && S.idx.byId.get(id);
+    if (!p || !p.bio) { if (!descTip.hidden) hideDesc(); return; }
+    if (descFor !== p.id) {
+      descTip.innerHTML = `<b>${esc(F.fullName(p))}</b><span>${esc(p.bio)}</span>`;
+      descFor = p.id; descTip.hidden = false;
+    }
+    const pad = 14, w = descTip.offsetWidth, h = descTip.offsetHeight;
+    let x = e.clientX + 18, y = e.clientY + 20;
+    if (x + w + pad > innerWidth) x = Math.max(pad, e.clientX - w - 14);
+    if (y + h + pad > innerHeight) y = Math.max(pad, e.clientY - h - 14);
+    descTip.style.transform = `translate(${x}px, ${y}px)`;
+  }, { passive: true });
+  document.addEventListener('mouseleave', hideDesc);
+  window.addEventListener('scroll', hideDesc, { passive: true, capture: true });
+  document.addEventListener('mousedown', hideDesc);
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if ($('#photoView')) { closePhoto(); return; }
     if (menuEl) { closeMenu(); return; }
     if ($('#modalHost').innerHTML) { $('#modalHost').innerHTML = ''; return; }
     if (S.openProfileId) { closeDrawer(); return; }
