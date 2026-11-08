@@ -1,35 +1,58 @@
-name: Rebuild on Netlify
+name: Build and deploy
 
-# Netlify builds and publishes the site itself on every push (see netlify.toml).
-# This workflow only asks Netlify to rebuild every 6 hours, so search-engine pages pick up
-# people the admin added since the last push. It needs a repository secret named
-# NETLIFY_BUILD_HOOK (Netlify → Site configuration → Build & deploy → Build hooks → Add build hook).
-# Without that secret it just checks that the site builds.
+# Publishes the site on GitHub Pages (https://qasim-147.github.io/familyshijra/) on every push,
+# and rebuilds every 6 hours so search-engine pages include people the admin added since.
+# Netlify (netlify.toml) also builds on every push; if a NETLIFY_BUILD_HOOK secret is set,
+# the 6-hourly run asks Netlify to rebuild too.
 
 on:
-  workflow_dispatch:        # "Run workflow" button in the Actions tab
+  push:
+    branches: [main]
+  workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  rebuild:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Check that the site builds
+      - id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Build site and member pages
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url }}/
         run: node scripts/prerender.mjs
-      - name: Ask Netlify to rebuild
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Ask Netlify to rebuild (scheduled runs only)
+        if: github.event_name == 'schedule'
         env:
           HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
         run: |
-          if [ -z "$HOOK" ]; then
-            echo "No NETLIFY_BUILD_HOOK secret set, so Netlify was not asked to rebuild. Netlify still rebuilds on every push."
-          else
-            curl -fsS -X POST -d '{}' "$HOOK" && echo "Netlify rebuild requested."
-          fi
+          if [ -n "$HOOK" ]; then curl -fsS -X POST -d '{}' "$HOOK" && echo "Netlify rebuild requested."; else echo "No NETLIFY_BUILD_HOOK secret; skipping."; fi
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
