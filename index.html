@@ -144,11 +144,26 @@
                     </div>
                   </div>
                 </div>
-                <div class="stage-top"><button class="btn sm" type="button" id="expandAll">Open all</button></div>
+                <div class="stage-top"><button class="btn sm" type="button" id="expandAll">Open all</button>
+                  <button class="btn sm" type="button" id="navHelpBtn" aria-expanded="false" aria-controls="navHelp" title="How to move around the tree"><b aria-hidden="true">?</b> How to navigate</button></div>
+                <div class="nav-help" id="navHelp" role="dialog" aria-label="How to navigate the tree" hidden>
+                  <div class="nav-help-head"><b>How to navigate</b><button type="button" class="btn icon sm" data-close aria-label="Close">✕</button></div>
+                  <ul>
+                    <li><kbd>Point</kbd><span>at a photo or name to see the person's details and description</span></li>
+                    <li><kbd>Click</kbd><span>a person to open their profile</span></li>
+                    <li><kbd>Double-click</kbd><span>a photo to enlarge it</span></li>
+                    <li><kbd>Drag</kbd><span>the background to move around the tree</span></li>
+                    <li><kbd>Ctrl + scroll</kbd><span>or the <b>+</b> and <b>−</b> buttons to zoom; <b>⛶</b> fits the whole tree</span></li>
+                    <li><kbd>Show / Hide</kbd><span>buttons under a person open or close their children</span></li>
+                    <li><kbd>Parents ↑</kbd><span>shows the generation above</span></li>
+                    <li><kbd>Esc</kbd><span>closes a photo, profile or this panel</span></li>
+                  </ul>
+                  <p class="nav-help-touch">On a phone: tap a person for their profile, drag with one finger, pinch to zoom.</p>
+                </div>
                 <div class="stage-ctrl" aria-label="Zoom">
-                  <button class="btn icon" type="button" id="zoomIn" aria-label="Zoom in"><svg><use href="#i-plus"/></svg></button>
-                  <button class="btn icon" type="button" id="zoomOut" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-                  <button class="btn icon" type="button" id="zoomFit" aria-label="Fit to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+                  <button class="btn icon" type="button" id="zoomIn" aria-label="Zoom in" title="Zoom in"><svg><use href="#i-plus"/></svg></button>
+                  <button class="btn icon" type="button" id="zoomOut" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                  <button class="btn icon" type="button" id="zoomFit" aria-label="Fit to screen" title="Fit the whole tree on screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
                 </div>
                 <div class="legend" aria-hidden="true"><span><i style="background:var(--male)"></i>Men</span><span><i style="background:var(--female)"></i>Women</span><span><svg width="16" height="16" style="vertical-align:-3px;color:var(--gold)"><use href="#i-knot"/></svg> Married</span></div>
                 <div class="stage-hint" id="stageHint" hidden>Hold Ctrl and scroll to zoom</div>

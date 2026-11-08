@@ -760,3 +760,22 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
 .couple.has-tools .node-tools { opacity: 1; }
 /* Typed entries appear in capitals while the admin types */
 .modal-form input[type="text"], .modal-form input:not([type]), .modal-form textarea { text-transform: uppercase; }
+
+/* Navigation tooltip extras */
+.hover-desc small { display: block; margin: -2px 0 4px; opacity: .75; font-size: .74rem; }
+.hover-desc span.none { opacity: .6; font-style: italic; }
+.hover-desc em { display: block; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.16); font-style: normal; font-size: .72rem; color: var(--gold-bright); }
+/* Status bar tips */
+.xp-status .xp-tips { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: center; opacity: .85; }
+@media (max-width: 900px) { .xp-status .xp-tips { display: none; } }
+/* "How to navigate" panel */
+#navHelpBtn b { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .72rem; margin-right: 2px; }
+.nav-help { position: absolute; top: 56px; right: 14px; z-index: 30; width: min(360px, calc(100% - 28px)); max-height: calc(100% - 80px); overflow: auto;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-lg); font-size: .86rem; }
+.nav-help[hidden] { display: none; }
+.nav-help-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.nav-help ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.nav-help li { display: grid; grid-template-columns: 112px 1fr; gap: 10px; align-items: baseline; }
+.nav-help kbd { font: inherit; font-size: .76rem; font-weight: 600; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); text-align: center; white-space: nowrap; }
+.nav-help-touch { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+@media (hover: none) { .nav-help li:first-child, .nav-help li:nth-child(5) { display: none; } }

@@ -724,7 +724,9 @@
     const n = xpView() === 'chart' ? null : xpGroups().reduce((a, g) => a + g.items.length, 0);
     const left = n === null ? 'Tree view' : `${n} item${n === 1 ? '' : 's'}${XP.sel ? ' · 1 selected' : ''}`;
     const right = XP.mode === 'folder' && XP.folder ? (S.settings.show_generation ? `Generation ${roman(generationOf(XP.folder))} · ${contentsText(XP.folder)}` : contentsText(XP.folder)) : XP.mode === 'search' ? 'Searching all members' : `${S.people.length} members`;
-    $('#xpStatus').innerHTML = `<span>${esc(left)}</span><span>${esc(right)}</span>`;
+    const tip = touchy() ? '' : xpView() === 'chart' ? 'Drag to move · Ctrl + scroll to zoom · Point at a photo for details · Double-click a photo to enlarge'
+      : 'Point at a person for details · Double-click to open · Right-click for more';
+    $('#xpStatus').innerHTML = `<span>${esc(left)}</span>${tip ? `<span class="xp-tips">${esc(tip)}</span>` : ''}<span>${esc(right)}</span>`;
   }
   function xpRenderToolbar() {
     $('#xpBack').disabled = !XP.back.length;
@@ -1773,10 +1775,14 @@
     const holder = t && t.closest('[data-id], [data-xid], .xp-d');
     const id = holder && (holder.dataset.id || holder.dataset.xid || XP.sel);
     const p = id && S.idx && S.idx.byId.get(id);
-    if (!p || !p.bio) { if (!descTip.hidden) hideDesc(); return; }
-    if (descFor !== p.id) {
-      descTip.innerHTML = `<b>${esc(F.fullName(p))}</b><span>${esc(p.bio)}</span>`;
-      descFor = p.id; descTip.hidden = false;
+    if (!p) { if (!descTip.hidden) hideDesc(); return; }
+    const onPhoto = !!e.target.closest('.portrait, .xp-ficon, .xp-item img');
+    const key = p.id + (onPhoto ? ':photo' : '');
+    if (descFor !== key) {
+      const yrs = F.years(p, isPrivate(p));
+      const hints = [p.photo_url && onPhoto ? 'Double-click photo to enlarge' : '', t.closest('.xp-item, .xp-trow') ? 'Double-click to open folder' : 'Click to open profile'].filter(Boolean);
+      descTip.innerHTML = `<b>${esc(F.fullName(p))}</b>${yrs ? `<small>${esc(yrs)}</small>` : ''}${p.bio ? `<span>${esc(p.bio)}</span>` : '<span class="none">No description yet</span>'}<em>${hints.map(esc).join(' · ')}</em>`;
+      descFor = key; descTip.hidden = false;
     }
     const pad = 14, w = descTip.offsetWidth, h = descTip.offsetHeight;
     let x = e.clientX + 18, y = e.clientY + 20;
@@ -1788,9 +1794,19 @@
   window.addEventListener('scroll', hideDesc, { passive: true, capture: true });
   document.addEventListener('mousedown', hideDesc);
 
+  // ---------- "How to navigate" panel in the tree view ----------
+  const navHelpBtn = $('#navHelpBtn'), navHelp = $('#navHelp');
+  if (navHelpBtn && navHelp) {
+    const setHelp = (open) => { navHelp.hidden = !open; navHelpBtn.setAttribute('aria-expanded', String(open)); };
+    navHelpBtn.addEventListener('click', (e) => { e.stopPropagation(); setHelp(navHelp.hidden); });
+    navHelp.querySelector('[data-close]').addEventListener('click', () => setHelp(false));
+    document.addEventListener('click', (e) => { if (!navHelp.hidden && !e.target.closest('#navHelp')) setHelp(false); });
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if ($('#photoView')) { closePhoto(); return; }
+    if (navHelp && !navHelp.hidden) { navHelp.hidden = true; navHelpBtn.setAttribute('aria-expanded', 'false'); return; }
     if (menuEl) { closeMenu(); return; }
     if ($('#modalHost').innerHTML) { $('#modalHost').innerHTML = ''; return; }
     if (S.openProfileId) { closeDrawer(); return; }
