@@ -4,7 +4,7 @@ A beautiful, mobile-friendly, search-engine-friendly family tree (shijra) that t
 
 Live site: **https://qasimali-shijra.netlify.app/**
 
-- **Homepage with your family photo**: the haveli photo sits in an arched gold frame beside the title, with a badge naming the founding couple. Admins can replace it in **Admin → Settings → Homepage photo** (`assets/img/haveli.jpg` is the default).
+- **Homepage with your family photo**: the family photo you add in Admin → Settings sits in an arched gold frame beside the title (no photo is built in), with a badge naming the founding couple. Admins can replace it in **Admin → Settings → Homepage photo** (`assets/img/haveli.jpg` is the default).
 - **Family explorer (works like File Explorer)**: every person is a folder holding their husband or wives and children. A man with two or more wives shows a separate group for each wife's children ("Children with Akbari Begam (1st wife)").
   - Collapsible folder tree on the left, address bar with clickable path and drop-down arrows, Back / Forward / Up buttons, search box.
   - Views: **Icons**, **Details** (sortable columns) and **Tree** (the graphical tree, rooted at the open folder). Visitors also get a **View as tree** button on the homepage.

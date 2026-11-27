@@ -40,7 +40,13 @@
       }
       return out;
     }
-    const loadPeople = async () => { cache.people = (await fetchAll('people')).map(Family.upperPerson); emit('people'); };
+    let peopleSig = '';
+    const loadPeople = async () => {
+      const rows = (await fetchAll('people')).map(Family.upperPerson);
+      const sig = JSON.stringify(rows);
+      if (sig === peopleSig) return; // nothing changed: don't redraw (keeps open forms and picked photos intact)
+      peopleSig = sig; cache.people = rows; emit('people');
+    };
     const loadSettings = async () => {
       const { data } = await sb.from('settings').select('data').eq('id', 1).maybeSingle();
       cache.settings = (data && data.data) || {}; emit('settings');
@@ -72,7 +78,7 @@
           .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => loadSettings())
           .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, refreshSubs)
           .subscribe();
-        window.addEventListener('focus', () => { refreshPeople(); if (admin) refreshSubs(); });
+        window.addEventListener('focus', () => { refreshPeople(); });
         await Promise.all([loadPeople(), loadSettings(), loadSubs()]);
         const { data: { session } } = await sb.auth.getSession();
         return { isAdmin: admin, canSubmit: true, needsPassword: !!(session && (linkType === 'invite' || linkType === 'recovery')), signedInEmail: session ? session.user.email : null };
