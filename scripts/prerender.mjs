@@ -172,7 +172,7 @@ function main() {
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(SITE)}">
 <meta property="og:type" content="website"><meta property="og:title" content="${esc(S.site_title)}"><meta property="og:description" content="${esc(desc)}"><meta property="og:url" content="${esc(SITE)}">
-<meta property="og:image" content="${esc(/^https?:/.test(S.hero_image || '') ? S.hero_image : SITE + 'assets/img/haveli.jpg')}"><meta name="twitter:card" content="summary_large_image">
+${/^https?:/.test(S.hero_image || '') ? `<meta property="og:image" content="${esc(S.hero_image)}">` : ''}<meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">${jsonLd({ '@context': 'https://schema.org', '@type': 'WebSite', name: S.site_title, url: SITE, description: desc })}</script>`;
     let index = readFileSync(path.join(root, 'index.html'), 'utf8');
     index = index.replace(/<!--SEO-HEAD-START-->[\s\S]*?<!--SEO-HEAD-END-->/, head);

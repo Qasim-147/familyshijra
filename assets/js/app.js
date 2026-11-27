@@ -46,7 +46,7 @@
     openProfileId: null, adminTab: 'people', adminOpen: false, meId: ls.get('shijra-me'), relA: null, relB: null,
   };
   const admin = () => S.isAdmin && !S.previewVisitor;
-  const HERO_DEFAULT = document.getElementById('heroImg') ? document.getElementById('heroImg').getAttribute('src') : '';
+  const HERO_DEFAULT = ''; // no built-in homepage photo: the admin adds one in Settings
   const isPrivate = (p) => !admin() && !S.settings.show_living_dates && F.isLiving(p);
   const localOn = () => S.settings.show_local_terms !== false;
 
@@ -182,7 +182,8 @@
     $$('[data-sec="elders"]').forEach((a) => { a.hidden = !s.show_elders; });
     $$('[data-sec="relations"]').forEach((a) => { a.hidden = !s.relationship_finder; });
     $('#founders').hidden = !s.show_founders;
-    $('#heroImg').src = s.hero_image || HERO_DEFAULT;
+    if (s.hero_image) { if ($('#heroImg').getAttribute('src') !== s.hero_image) $('#heroImg').src = s.hero_image; } else $('#heroImg').removeAttribute('src');
+    $('#heroFigure').classList.toggle('no-photo', !s.hero_image);
     { const cap = $('#heroCap'); if (cap) { $('p', cap).textContent = s.hero_caption || ''; cap.hidden = !s.hero_caption; } }
     document.title = s.tagline ? `${title} – ${s.tagline}` : title;
     const parts = [];
@@ -1584,9 +1585,9 @@
         <div class="field" style="margin-top:10px"><label for="sAbout">About the family (shown to Google and on the members page)</label><textarea id="sAbout" name="about" maxlength="3000">${esc(s.about)}</textarea></div>
         <div class="field" style="margin-top:10px"><label for="sAnn">Announcement banner</label><input id="sAnn" name="announcement" type="text" maxlength="200" value="${esc(s.announcement)}" placeholder="e.g. Family get-together after Eid in Lucknow. Add your branch before then!"></div>
         <div class="field" style="margin-top:12px"><span class="lbl">Homepage photo</span>
-          <div class="photo-pick"><img id="sHeroPrev" src="${esc(s.hero_image || HERO_DEFAULT)}" alt="Current homepage photo" style="width:168px;height:132px;object-fit:cover;border-radius:84px 84px 12px 12px;box-shadow:0 0 0 2px var(--gold);flex:none">
-          <div><div class="hero-btns"><label class="btn primary sm" id="sHeroBtn">${ico('i-edit')}Change photo<input id="sHero" type="file" accept="image/*" hidden></label><button class="btn sm" type="button" id="sHeroReset">Use the default photo</button></div>
-          <div class="hint">Saved as soon as you pick a photo. A wide photo of the family home, village or a family gathering works best.</div><div class="hint" id="sHeroMsg" role="status" aria-live="polite"></div></div></div>
+          <div class="photo-pick"><img id="sHeroPrev" ${s.hero_image ? `src="${esc(s.hero_image)}"` : ''} alt="Current homepage photo" class="hero-prev">
+          <div><div class="hero-btns"><label class="btn primary sm" id="sHeroBtn">${ico('i-edit')}Change photo<input id="sHero" type="file" accept="image/*" hidden></label><button class="btn sm" type="button" id="sHeroReset" ${s.hero_image ? '' : 'hidden'}>Remove photo</button></div>
+          <div class="hint">Saved as soon as you pick a photo. Until you add one, the homepage shows no photo. A wide photo of the family home, village or a family gathering works best.</div><div class="hint" id="sHeroMsg" role="status" aria-live="polite"></div></div></div>
           <label for="sHeroCap" style="display:block;margin-top:12px">Note below the homepage photo</label><textarea id="sHeroCap" name="hero_caption" maxlength="1000" rows="5" placeholder="e.g. a note about how this family tree was compiled">${esc(s.hero_caption)}</textarea><div class="hint">Shown in a decorated panel under the photo. Leave empty to hide it.</div></div>
       </div>
       <div class="card"><h3>Homepage sections</h3>
@@ -1622,7 +1623,11 @@
     const heroMsg = (t, bad) => { const m = $('#sHeroMsg', el); m.textContent = t; m.style.color = bad ? 'var(--danger, #b3261e)' : ''; };
     const saveHero = async (url, done) => {
       const btns = $$('#sHeroBtn, #sHeroReset', el); btns.forEach((x) => x.classList.add('busy'));
-      try { await S.store.saveSettings(stripDefaults({ ...S.settings, hero_image: url })); $('#sHeroPrev', el).src = url || HERO_DEFAULT; heroMsg(done); toast(done); }
+      try {
+        await S.store.saveSettings(stripDefaults({ ...S.settings, hero_image: url }));
+        if (url) $('#sHeroPrev', el).src = url; else $('#sHeroPrev', el).removeAttribute('src');
+        $('#sHeroReset', el).hidden = !url; heroMsg(done); toast(done);
+      }
       catch (err) { heroMsg('Couldn\'t save the photo: ' + (err.message || err), true); }
       finally { btns.forEach((x) => x.classList.remove('busy')); }
     };
@@ -1630,9 +1635,10 @@
       const f = e.target.files[0]; e.target.value = ''; if (!f) return;
       $('#sHeroPrev', el).src = URL.createObjectURL(f); heroMsg('Uploading photo…');
       try { const url = await S.store.uploadPhoto(await compressImage(f, S.store.heroMax || 1400), 'site'); await saveHero(url, 'Homepage photo updated.'); }
-      catch (err) { $('#sHeroPrev', el).src = S.settings.hero_image || HERO_DEFAULT; heroMsg('Couldn\'t change the photo: ' + (err.message || err), true); }
+      catch (err) { if (S.settings.hero_image) $('#sHeroPrev', el).src = S.settings.hero_image; else $('#sHeroPrev', el).removeAttribute('src'); heroMsg('Couldn\'t change the photo: ' + (err.message || err), true); }
     };
-    $('#sHeroReset', el).onclick = () => saveHero('', 'Homepage photo set back to the default.');
+    $('#sHeroReset', el).onclick = () => { if (confirmRemoveHero()) saveHero('', 'Homepage photo removed.'); };
+    function confirmRemoveHero() { return window.confirm('Remove the homepage photo? You can add a new one any time.'); }
     $('#setForm', el).addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.target; const fd = new FormData(f); const next = { ...S.settings };
