@@ -779,3 +779,25 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
 .nav-help kbd { font: inherit; font-size: .76rem; font-weight: 600; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); text-align: center; white-space: nowrap; }
 .nav-help-touch { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
 @media (hover: none) { .nav-help li:first-child, .nav-help li:nth-child(5) { display: none; } }
+
+/* Text below photos */
+.photo-cap { margin: 8px auto 0; max-width: 300px; font-size: .78rem; line-height: 1.4; letter-spacing: .03em; color: var(--muted); text-align: center; font-style: italic; }
+.hero-note { position: relative; z-index: 1; margin: 18px 0 0; padding: 26px 34px; border-radius: 6px;
+  background: linear-gradient(180deg, #fdf6e3, #f8ecd0); color: #2a2117;
+  border: 2px solid #c9a24a; box-shadow: inset 0 0 0 5px #fdf6e3, inset 0 0 0 6.5px #d8b867, 0 10px 28px rgb(0 0 0 / .28); }
+.hero-note[hidden] { display: none; }
+.hero-note p { margin: 0; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: clamp(.86rem, 1.15vw, 1.02rem); line-height: 1.45; text-wrap: pretty; }
+.hero-note .orn { position: absolute; width: 38px; height: 38px; color: #c9a24a; pointer-events: none; }
+.hero-note .orn svg { width: 100%; height: 100%; display: block; }
+.hero-note .tl { top: 6px; left: 6px; }
+.hero-note .tr { top: 6px; right: 6px; transform: scaleX(-1); }
+.hero-note .bl { bottom: 6px; left: 6px; transform: scaleY(-1); }
+.hero-note .br { bottom: 6px; right: 6px; transform: scale(-1, -1); }
+@media (max-width: 560px) { .hero-note { padding: 22px 22px; } .hero-note .orn { width: 28px; height: 28px; } }
+.hover-desc small.cap { font-style: italic; opacity: .85; }
+.change-photo { margin-top: 8px; cursor: pointer; }
+.change-photo.busy { opacity: .6; pointer-events: none; }
+
+.hero-figure:has(.founders:not(:empty)) .hero-note { margin-top: 50px; }
+
+.hero-photo { position: relative; }

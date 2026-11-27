@@ -27,10 +27,12 @@ create table if not exists public.people (
   visible       boolean not null default true,
   sample        boolean not null default false,
   entered_by    text check (entered_by is null or char_length(entered_by) <= 80),
+  photo_caption text check (photo_caption is null or char_length(photo_caption) <= 160),
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
 alter table public.people add column if not exists entered_by text check (entered_by is null or char_length(entered_by) <= 80);
+alter table public.people add column if not exists photo_caption text check (photo_caption is null or char_length(photo_caption) <= 160);
 create index if not exists people_father_idx on public.people(father_id);
 create index if not exists people_mother_idx on public.people(mother_id);
 create index if not exists people_name_idx on public.people(lower(first_name), lower(last_name));

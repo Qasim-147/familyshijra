@@ -4,7 +4,7 @@
 (function (root) {
   const PERSON_COLS = ['id', 'slug', 'first_name', 'middle_name', 'last_name', 'maiden_name', 'nickname', 'gender',
     'birth_date', 'birth_place', 'death_date', 'death_place', 'is_living', 'current_place', 'occupation', 'bio',
-    'photo_url', 'father_id', 'mother_id', 'spouse_ids', 'visible', 'sample', 'created_at', 'entered_by'];
+    'photo_url', 'father_id', 'mother_id', 'spouse_ids', 'visible', 'sample', 'created_at', 'entered_by', 'photo_caption'];
   const pickPerson = (p) => {
     p = root.Family ? root.Family.upperPerson(p) : p;
     const o = {};
@@ -87,14 +87,24 @@
         const { error } = await sb.from('submissions').insert(row);
         if (error) throw new Error(error.message);
       },
+      captionMissing: false,
       async savePerson(p) {
-        const { error } = await sb.from('people').upsert(pickPerson(p));
+        let row = pickPerson(p);
+        if (this.captionMissing) delete row.photo_caption;
+        let { error } = await sb.from('people').upsert(row);
+        if (error && /photo_caption/.test(error.message || '')) {
+          // The database has not had the one-time update for photo captions yet: save everything else.
+          this.captionMissing = true; delete row.photo_caption;
+          ({ error } = await sb.from('people').upsert(row));
+        }
         if (error) throw new Error(error.message);
         refreshPeople(); return p;
       },
       async savePeople(list) {
         for (let i = 0; i < list.length; i += 400) {
-          const { error } = await sb.from('people').upsert(list.slice(i, i + 400).map(pickPerson));
+          const rows = list.slice(i, i + 400).map(pickPerson);
+          if (this.captionMissing) rows.forEach((r) => delete r.photo_caption);
+          const { error } = await sb.from('people').upsert(rows);
           if (error) throw new Error(error.message);
         }
         await loadPeople();
@@ -122,7 +132,12 @@
       async uploadPhoto(blob, folder) {
         const path = `${folder}/${Family.uid()}.jpg`;
         const { error } = await sb.storage.from(cfg.photoBucket || 'photos').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
-        if (error) throw new Error('Photo upload failed: ' + error.message);
+        if (error) {
+          const why = /row-level security|unauthorized|not allowed|403|jwt/i.test(error.message || '')
+            ? 'You are signed out or this account is not an admin. Sign in again with Admin login and retry.'
+            : error.message;
+          throw new Error('Photo upload failed: ' + why);
+        }
         return sb.storage.from(cfg.photoBucket || 'photos').getPublicUrl(path).data.publicUrl;
       },
       async login(email, password) {
