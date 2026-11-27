@@ -115,7 +115,7 @@
     if (S.meId && !S.idx.byId.has(S.meId) && S.people.length) { S.meId = null; ls.set('shijra-me', null); }
     renderAll();
     if (S.openProfileId) { if (S.idx.byId.has(S.openProfileId)) openProfile(S.openProfileId, { keepHash: true }); else closeDrawer(); }
-    if (S.adminOpen) renderAdmin();
+    if (S.adminOpen && S.adminTab === 'people') renderAdmin();
     updateBadge();
   }
   function currentRoot() {
@@ -1916,7 +1916,7 @@
     let routed = false;
     applySettings();
     store.subscribeSettings((s) => { S.settings = { ...DEFAULTS, ...(s || {}) }; relCache.clear(); applySettings(); if (S.people.length) renderAll(); });
-    store.subscribeSubmissions((list) => { S.subs = (list || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))); updateBadge(); if (S.adminOpen) renderAdmin(); });
+    store.subscribeSubmissions((list) => { S.subs = (list || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))); updateBadge(); });
     store.subscribePeople((list) => {
       setPeople(list || []);
       applySettings();
