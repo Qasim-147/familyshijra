@@ -66,7 +66,7 @@
 
   // Everything the admin types is shown in capital letters.
   F.TEXT_FIELDS = ['first_name', 'middle_name', 'last_name', 'maiden_name', 'nickname', 'birth_place', 'death_place',
-    'current_place', 'occupation', 'bio', 'entered_by'];
+    'current_place', 'occupation', 'bio', 'entered_by', 'photo_caption'];
   F.upperPerson = (p) => {
     if (!p) return p;
     const o = { ...p };

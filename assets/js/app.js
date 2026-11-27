@@ -35,6 +35,7 @@
     default_view: 'icons',
     fields: {},
     hero_image: '',
+    hero_caption: 'This family tree has been compiled by the host from his personal recollections, solely for family reference and remembrance. It reflects family traditions, commonly used nicknames and surnames, and the birth order as remembered by the host. Names, dates of birth, and other details have been recorded on an informal basis and may differ from official records. In case of any discrepancy, actual records shall prevail.',
     announcement: '',
   };
 
@@ -80,12 +81,14 @@
   async function compressImage(file, max) {
     const url = URL.createObjectURL(file);
     try {
-      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('This photo could not be read. Please choose a JPG or PNG photo (iPhone HEIC photos: share or save them as JPG first).')); i.src = url; });
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement('canvas');
       c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      return await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82));
+      const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82));
+      if (!blob) throw new Error('This photo could not be processed. Please try a smaller JPG or PNG photo.');
+      return blob;
     } finally { URL.revokeObjectURL(url); }
   }
   /** Relation of person `id` to the viewer ("Your Dada"), or null. */
@@ -180,6 +183,7 @@
     $$('[data-sec="relations"]').forEach((a) => { a.hidden = !s.relationship_finder; });
     $('#founders').hidden = !s.show_founders;
     $('#heroImg').src = s.hero_image || HERO_DEFAULT;
+    { const cap = $('#heroCap'); if (cap) { $('p', cap).textContent = s.hero_caption || ''; cap.hidden = !s.hero_caption; } }
     document.title = s.tagline ? `${title} – ${s.tagline}` : title;
     const parts = [];
     if (S.setupMode) parts.push('<strong>Setup preview:</strong> not connected to Supabase yet, so changes stay in this browser.');
@@ -1108,6 +1112,8 @@
         <div class="drawer-band">${pattern()}</div>
         <div class="profile-hero">
           ${portraitHTML(p, 'lg')}
+          ${p.photo_url && p.photo_caption ? `<p class="photo-cap">${esc(p.photo_caption)}</p>` : ''}
+          ${admin() ? `<label class="btn sm change-photo">${ico('i-edit')}${p.photo_url ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" data-quick-photo="${esc(id)}" hidden></label>` : ''}
           <h2 id="profileName">${esc(F.fullName(p))}</h2>
           ${p.nickname ? `<div class="nick">${esc(p.nickname)}</div>` : ''}
           <div class="years">${esc(F.years(p, priv))}</div>
@@ -1258,7 +1264,8 @@
       ${txt('occupation', 'Occ', 'Occupation')}
     </div>
     ${on('bio') ? `<div class="field"><label for="${prefix}Bio">Story, memories or notes</label><textarea id="${prefix}Bio" name="bio" maxlength="5000">${esc(p.bio)}</textarea></div>` : ''}
-    ${on('photo') ? `<div class="field"><span class="lbl">Photo</span><div class="photo-pick"><div>${portraitHTML(p, '')}</div><div><input id="${prefix}Photo" name="photo" type="file" accept="image/*"><div class="hint">A clear face photo. It is resized automatically.</div>${p.photo_url ? `<label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.88rem"><input type="checkbox" name="remove_photo" id="${prefix}RmPhoto"> Remove current photo</label>` : ''}</div></div></div>` : ''}`;
+    ${on('photo') ? `<div class="field"><span class="lbl">Photo</span><div class="photo-pick"><div>${portraitHTML(p, '')}</div><div><input id="${prefix}Photo" name="photo" type="file" accept="image/*"><div class="hint">A clear face photo. It is resized automatically.</div>
+      <label for="${prefix}PhotoCap" style="display:block;margin-top:10px;font-weight:600;font-size:.88rem">Text below the photo</label><input id="${prefix}PhotoCap" name="photo_caption" type="text" maxlength="160" value="${esc(p.photo_caption)}" placeholder="e.g. AT THE HAVELI, LUCKNOW, 1962">${p.photo_url ? `<label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.88rem"><input type="checkbox" name="remove_photo" id="${prefix}RmPhoto"> Remove current photo</label>` : ''}</div></div></div>` : ''}`;
   }
 
   function wireLiving(form, p = {}) {
@@ -1287,7 +1294,7 @@
   /** Reads only the fields that are in the form, so switched-off fields keep their saved values. */
   function readPerson(form) {
     const fd = new FormData(form); const o = {};
-    for (const k of ['first_name', 'middle_name', 'maiden_name', 'nickname', 'gender', 'birth_date', 'birth_place', 'death_date', 'death_place', 'current_place', 'occupation', 'bio', 'entered_by']) {
+    for (const k of ['first_name', 'middle_name', 'maiden_name', 'nickname', 'gender', 'birth_date', 'birth_place', 'death_date', 'death_place', 'current_place', 'occupation', 'bio', 'entered_by', 'photo_caption']) {
       if (!form.querySelector(`[name="${k}"]`)) continue;
       const v = (fd.get(k) || '').toString().trim(); o[k] = v || null;
     }
@@ -1305,6 +1312,22 @@
     for (const k of ['birth_date', 'death_date']) if (o[k] && !F.validDate(o[k])) { errs.push('Write dates like 15-Aug-1950, or just the year (1950), or use the calendar.'); form.querySelector(`[name=${k}]`)?.closest('.field')?.classList.add('err'); }
     if (form.querySelector('[name=entered_by]') && !o.entered_by) { errs.push('Enter the name of the admin making this entry.'); form.querySelector('[name=entered_by]').closest('.field').classList.add('err'); }
     return errs;
+  }
+  /** Another entry with the same name that nothing tells apart (different father, mother or date of birth). */
+  function findDuplicate(np, selfId) {
+    const norm = (v) => String(v || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const key = (x) => norm([x.first_name, x.middle_name].filter(Boolean).join(' '));
+    const name = key(np); if (!name) return null;
+    const differ = (a, b) => !!a && !!b && a !== b;
+    return S.allPeople.find((x) => x.id !== selfId && key(x) === name && !differ(norm(x.last_name), norm(np.last_name))
+      && !differ(x.father_id, np.father_id) && !differ(x.mother_id, np.mother_id)
+      && !differ(F.parseDate(x.birth_date || '') || x.birth_date, F.parseDate(np.birth_date || '') || np.birth_date)) || null;
+  }
+  function duplicateText(d) {
+    const byId = (i) => S.allPeople.find((x) => x.id === i);
+    const fa = d.father_id && byId(d.father_id), mo = d.mother_id && byId(d.mother_id);
+    const bits = [fa && `child of ${F.fullName(fa)}`, !fa && mo && `child of ${F.fullName(mo)}`, F.years(d, false) && F.years(d, false)].filter(Boolean);
+    return `${F.fullName(d)} is already in the shijra${bits.length ? ` (${bits.join(', ')})` : ''}. Duplicate entries are not allowed: edit that entry instead, or add a different father, mother or date of birth if this is another person.`;
   }
   function canVisitorSend() { toast('Only the family admin adds or changes entries in the shijra.'); return false; }
 
@@ -1408,6 +1431,8 @@
       const btn = $('button[type=submit]', m.wrap); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Saving…';
       try {
         const np = { ...p, ...vals, father_id: fPick.get(), mother_id: mPick.get(), spouse_ids: spPick.get(), visible: $('#eVisible', m.wrap).checked };
+        const dup = findDuplicate(F.upperPerson(np), np.id);
+        if (dup) { $('#eErr', m.wrap).textContent = duplicateText(dup); $('[name=first_name]', m.form).closest('.field').classList.add('err'); btn.disabled = false; btn.textContent = label; return; }
         if (!existing) np.created_at = new Date().toISOString();
         const file = m.form.querySelector('input[name=photo]')?.files[0];
         if (file) np.photo_url = await S.store.uploadPhoto(await compressImage(file, S.store.photoMax), 'people');
@@ -1417,6 +1442,7 @@
         await savePersonWithLinks(np, existing);
         if (afterSave) await afterSave(np);
         m.close(); toast(existing ? 'Changes saved.' : `${F.shortName(np)} added to the shijra.`);
+        if (np.photo_caption && S.store.captionMissing) setTimeout(() => toast('Saved. The text below the photo needs a one-time database update before it can be stored (see the README).'), 2600);
         if (!S.adminOpen) setTimeout(() => { reveal(np.id); openProfile(np.id); }, 300);
       } catch (err) { btn.disabled = false; btn.textContent = label; $('#eErr', m.wrap).textContent = 'Couldn\'t save: ' + (err.message || err); }
     });
@@ -1559,7 +1585,8 @@
         <div class="field" style="margin-top:10px"><label for="sAnn">Announcement banner</label><input id="sAnn" name="announcement" type="text" maxlength="200" value="${esc(s.announcement)}" placeholder="e.g. Family get-together after Eid in Lucknow. Add your branch before then!"></div>
         <div class="field" style="margin-top:12px"><span class="lbl">Homepage photo</span>
           <div class="photo-pick"><img id="sHeroPrev" src="${esc(s.hero_image || HERO_DEFAULT)}" alt="Current homepage photo" style="width:168px;height:132px;object-fit:cover;border-radius:84px 84px 12px 12px;box-shadow:0 0 0 2px var(--gold);flex:none">
-          <div><input id="sHero" type="file" accept="image/*"><div class="hint">A wide photo of the family home, village or a family gathering works best.</div><button class="btn sm" type="button" id="sHeroReset" style="margin-top:8px">Use the default photo</button></div></div></div>
+          <div><input id="sHero" type="file" accept="image/*"><div class="hint">A wide photo of the family home, village or a family gathering works best.</div><button class="btn sm" type="button" id="sHeroReset" style="margin-top:8px">Use the default photo</button></div></div>
+          <label for="sHeroCap" style="display:block;margin-top:12px">Note below the homepage photo</label><textarea id="sHeroCap" name="hero_caption" maxlength="1000" rows="5" placeholder="e.g. a note about how this family tree was compiled">${esc(s.hero_caption)}</textarea><div class="hint">Shown in a decorated panel under the photo. Leave empty to hide it.</div></div>
       </div>
       <div class="card"><h3>Homepage sections</h3>
         ${sw('show_founders', 'Founders badge', 'The badge on the homepage photo naming the founding couple.')}
@@ -1596,7 +1623,7 @@
     $('#setForm', el).addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.target; const fd = new FormData(f); const next = { ...S.settings };
-      for (const k of ['site_title', 'site_title_local', 'tagline', 'about', 'announcement', 'bot_welcome']) next[k] = (fd.get(k) || '').toString().trim();
+      for (const k of ['site_title', 'site_title_local', 'tagline', 'about', 'announcement', 'bot_welcome', 'hero_caption']) next[k] = (fd.get(k) || '').toString().trim();
       for (const k of ['search_enabled', 'relationship_finder', 'bot_enabled', 'bot_teaser', 'show_living_dates', 'show_spouses', 'show_generation', 'show_local_terms', 'show_founders', 'show_elders', 'show_recent']) next[k] = !!f.elements[k].checked;
       next.default_depth = Number(fd.get('default_depth')) || 2;
       next.default_view = String(fd.get('default_view') || 'icons');
@@ -1753,13 +1780,27 @@
     box.querySelector('.photo-close').focus();
   }
   function closePhoto() { const b = $('#photoView'); if (b) b.remove(); }
+  // Admin: change a photo straight from the profile
+  document.addEventListener('change', async (e) => {
+    const inp = e.target.closest && e.target.closest('input[data-quick-photo]');
+    if (!inp || !inp.files[0]) return;
+    if (!admin()) { needAdmin(); return; }
+    const p = S.allPeople.find((x) => x.id === inp.dataset.quickPhoto); if (!p) return;
+    const lbl = inp.closest('label'); lbl.classList.add('busy'); toast('Uploading photo…');
+    try {
+      const url = await S.store.uploadPhoto(await compressImage(inp.files[0], S.store.photoMax), 'people');
+      await S.store.savePerson({ ...p, photo_url: url });
+      toast('Photo changed.'); setTimeout(() => openProfile(p.id), 500);
+    } catch (err) { toast('Couldn\'t change the photo: ' + (err.message || err)); }
+    finally { lbl.classList.remove('busy'); inp.value = ''; }
+  });
   document.addEventListener('dblclick', (e) => {
     const img = e.target.closest('.portrait img, .xp-item img, .xp-trow img');
     if (!img) return;
     e.preventDefault(); e.stopPropagation();
     const holder = img.closest('[data-id], [data-xid]');
     const p = holder && S.idx && S.idx.byId.get(holder.dataset.id || holder.dataset.xid);
-    openPhoto(img.currentSrc || img.src, p ? F.fullName(p) : img.alt);
+    openPhoto(img.currentSrc || img.src, p ? F.fullName(p) + (p.photo_caption ? ' · ' + p.photo_caption : '') : img.alt);
   }, true);
 
   // ---------- description that follows the mouse over a member's photo or name ----------
@@ -1781,7 +1822,7 @@
     if (descFor !== key) {
       const yrs = F.years(p, isPrivate(p));
       const hints = [p.photo_url && onPhoto ? 'Double-click photo to enlarge' : '', t.closest('.xp-item, .xp-trow') ? 'Double-click to open folder' : 'Click to open profile'].filter(Boolean);
-      descTip.innerHTML = `<b>${esc(F.fullName(p))}</b>${yrs ? `<small>${esc(yrs)}</small>` : ''}${p.bio ? `<span>${esc(p.bio)}</span>` : '<span class="none">No description yet</span>'}<em>${hints.map(esc).join(' · ')}</em>`;
+      descTip.innerHTML = `<b>${esc(F.fullName(p))}</b>${yrs ? `<small>${esc(yrs)}</small>` : ''}${p.photo_url && p.photo_caption && onPhoto ? `<small class="cap">${esc(p.photo_caption)}</small>` : ''}${p.bio ? `<span>${esc(p.bio)}</span>` : '<span class="none">No description yet</span>'}<em>${hints.map(esc).join(' · ')}</em>`;
       descFor = key; descTip.hidden = false;
     }
     const pad = 14, w = descTip.offsetWidth, h = descTip.offsetHeight;

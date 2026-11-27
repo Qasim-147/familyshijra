@@ -95,6 +95,13 @@ Open http://localhost:8000. Without Supabase configured it runs in **setup previ
 
 Each person also has a **Show on the public tree** switch (Admin → People), so an admin can keep someone visible to admins only.
 
+## Photos, captions and duplicates
+
+- **Change a photo**: open the person's profile and use **Change photo** (or Edit → Photo). Photos must be JPG or PNG; iPhone HEIC photos need saving as JPG first.
+- **Text below a member's photo**: Edit → *Text below the photo*. Needs a one-time database update: open Supabase → SQL Editor, paste `supabase/migrations/2026-11-27_photo_caption.sql` and click Run. Until then everything else still saves.
+- **Note below the homepage photo**: Admin → Settings → *Note below the homepage photo*. Shown in a decorated panel; leave empty to hide it.
+- **No duplicates**: an entry with the same name as someone already in the shijra is refused unless a different father, mother or date of birth tells them apart.
+
 ## How entries are published
 
 1. The admin signs in, opens a person and taps **Add a relative** (or **People → Add person**), picks the relationship (for a man with several wives: "Son or daughter with [wife]"), fills in the name, **Entered by** and any other switched-on fields, and saves.
