@@ -801,3 +801,7 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
 .hero-figure:has(.founders:not(:empty)) .hero-note { margin-top: 50px; }
 
 .hero-photo { position: relative; }
+
+.hero-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+#sHeroBtn { cursor: pointer; }
+#sHeroBtn.busy, #sHeroReset.busy { opacity: .6; pointer-events: none; }
